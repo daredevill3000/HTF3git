@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, MapPin, Phone, Ambulance, Shield, CheckCircle, X, Radio } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Geolocation } from "@capacitor/geolocation";
@@ -23,60 +23,149 @@ const EmergencyButton = () => {
   const [sosActive, setSosActive]           = useState(false);
   const [sosNotifications, setSosNotifications] = useState([]);
   const [sosComplete, setSosComplete]       = useState(false);
-  const [smsStatus, setSmsStatus]           = useState(null); // "sending" | "sent" | "failed"
+  const [smsStatus, setSmsStatus]           = useState(null);
   const [location, setLocation]             = useState({ label: "Locating...", coords: null });
+  const [locationReady, setLocationReady]   = useState(false);
+  const locationRef                         = useRef({ label: "Locating...", coords: null });
   const { user } = useAuth();
 
-  // Grab GPS on mount
+  // Reverse geocode coords → human-readable address
+  const reverseGeocode = async (lat, lon) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+        { headers: { "Accept-Language": "en" } }
+      );
+      const data = await res.json();
+      if (data && data.display_name) {
+        // Shorten: take first 3 parts (e.g. "Gokak, Belagavi, Karnataka")
+        const parts = data.display_name.split(",").slice(0, 3).map(s => s.trim());
+        return parts.join(", ");
+      }
+    } catch (e) {
+      console.warn("Reverse geocode failed:", e.message);
+    }
+    return null;
+  };
+
+  // Grab GPS on mount — keep refreshing until we get a fix
   useEffect(() => {
     const getLocation = async () => {
+      const applyCoords = async (latitude, longitude) => {
+        const coords = `${latitude},${longitude}`;
+        const coordLabel = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+        // Set coords immediately so SOS can fire right away
+        const immediate = { label: coordLabel, coords };
+        setLocation(immediate);
+        locationRef.current = immediate;
+        setLocationReady(true);
+
+        // Then try to get a human-readable address in the background
+        const address = await reverseGeocode(latitude, longitude);
+        if (address) {
+          const withAddress = { label: address, coords };
+          setLocation(withAddress);
+          locationRef.current = withAddress;
+        }
+      };
+
       try {
-        // Request permission (required on Android with Capacitor)
         const permission = await Geolocation.requestPermissions();
-        if (permission.location !== "granted" && permission.coarseLocation !== "granted") {
-          setLocation({ label: "Location permission denied", coords: null });
+        if (permission.location === "granted" || permission.coarseLocation === "granted") {
+          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 15000 });
+          await applyCoords(pos.coords.latitude, pos.coords.longitude);
           return;
         }
-        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
-        const { latitude, longitude } = pos.coords;
-        setLocation({
-          label: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
-          coords: `${latitude},${longitude}`,
-        });
       } catch (err) {
-        console.error("Geolocation error:", err);
-        setLocation({ label: "Location unavailable", coords: null });
+        console.warn("Capacitor GPS failed, trying browser fallback:", err.message);
+      }
+
+      // Browser geolocation fallback
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            await applyCoords(pos.coords.latitude, pos.coords.longitude);
+          },
+          (err) => {
+            console.error("GPS failed:", err.message);
+            const fallback = { label: "Location unavailable", coords: null };
+            setLocation(fallback);
+            locationRef.current = fallback;
+            setLocationReady(true);
+          },
+          { enableHighAccuracy: true, timeout: 15000 }
+        );
+      } else {
+        const fallback = { label: "Location unavailable", coords: null };
+        setLocation(fallback);
+        locationRef.current = fallback;
+        setLocationReady(true);
       }
     };
     getLocation();
   }, []);
 
-  // ── Send SMS via backend ──────────────────────────────────────────────
-  const sendSOSSms = async () => {
+  // ── Send SMS directly via Twilio REST API ────────────────────────────
+  const sendSOSSms = async (currentLocation) => {
     setSmsStatus("sending");
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/sos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name:        user?.email || "Emergency User",
-          location:    location.label,
-          coordinates: location.coords,
-        }),
-      });
 
-      const data = await res.json();
-      if (data.success) {
-        setSmsStatus("sent");
-        console.log("✅ SMS sent:", data);
-      } else {
-        setSmsStatus("failed");
-        console.error("❌ SMS failed:", data.error);
-      }
-    } catch (err) {
+    const accountSid = import.meta.env.VITE_TWILIO_ACCOUNT_SID;
+    const authToken  = import.meta.env.VITE_TWILIO_AUTH_TOKEN;
+    const fromNumber = import.meta.env.VITE_TWILIO_PHONE_NUMBER;
+    const contacts   = (import.meta.env.VITE_EMERGENCY_CONTACTS || "").split(",").map(n => n.trim()).filter(Boolean);
+
+    if (!accountSid || !authToken || !fromNumber || contacts.length === 0) {
+      console.error("❌ Twilio env vars missing");
       setSmsStatus("failed");
-      console.error("❌ SMS request error:", err.message);
+      return;
     }
+
+    // Keep under 160 chars for Twilio trial account limit
+    const mapLink = currentLocation.coords
+      ? `maps.google.com/?q=${currentLocation.coords}`
+      : null;
+    const time = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+    const name = (user?.email || "User").split("@")[0];
+
+    let body = `SOS! ${name} needs help. ${currentLocation.label}.`;
+    if (mapLink) body += ` ${mapLink}.`;
+    body += ` Time: ${time}. -Sahayaka`;
+
+    // Trim to 155 chars if still too long (safety margin)
+    if (body.length > 155) {
+      body = `SOS! ${name} needs help. ${mapLink || currentLocation.label}. Time: ${time}. -Sahayaka`;
+    }
+
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+    const credentials = btoa(`${accountSid}:${authToken}`);
+
+    let anySuccess = false;
+
+    for (const contact of contacts) {
+      const to = contact.startsWith("+") ? contact : `+${contact}`;
+      try {
+        const params = new URLSearchParams({ To: to, From: fromNumber, Body: body });
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Basic ${credentials}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: params.toString(),
+        });
+        const data = await res.json();
+        if (res.ok && data.sid) {
+          console.log(`✅ SMS sent to ${to} — SID: ${data.sid}`);
+          anySuccess = true;
+        } else {
+          console.error(`❌ SMS failed for ${to}:`, data.message || data);
+        }
+      } catch (err) {
+        console.error(`❌ SMS error for ${to}:`, err.message);
+      }
+    }
+
+    setSmsStatus(anySuccess ? "sent" : "failed");
   };
 
   // ── Trigger SOS ───────────────────────────────────────────────────────
@@ -86,8 +175,8 @@ const EmergencyButton = () => {
     setSosComplete(false);
     setSmsStatus(null);
 
-    // Fire SMS immediately in background
-    sendSOSSms();
+    // Use ref to always get the latest location value
+    sendSOSSms(locationRef.current);
 
     // Run UI notification sequence
     SOS_SEQUENCE.forEach((step) => {
@@ -113,12 +202,13 @@ const EmergencyButton = () => {
     <>
       {/* Floating Emergency Button */}
       <button
-        className="floating-emergency-btn"
+        className={`floating-emergency-btn ${!locationReady ? "locating" : ""}`}
         onClick={triggerSOS}
         aria-label="Emergency SOS"
-        title="Emergency SOS"
+        title={locationReady ? "Emergency SOS" : "Acquiring location..."}
       >
         <AlertTriangle size={24} />
+        {!locationReady && <span className="locating-label">Locating...</span>}
       </button>
 
       {/* SOS Modal Overlay */}
