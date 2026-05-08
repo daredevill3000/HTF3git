@@ -2392,3 +2392,489 @@ button:active {
   display: block;
   line-height: 1;
 }
+
+/* ============================================
+   AI TRIAGE — SEVERITY SYSTEM
+   ============================================ */
+
+.ai-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--accents-2);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ai-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ai-header-icon {
+  background: rgba(230, 57, 70, 0.1);
+  padding: 10px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ai-header-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.ai-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.connected  { background: #22c55e; }
+.status-dot.connecting { background: #f59e0b; animation: dotBounce 1s infinite; }
+.status-dot.error      { background: #ef4444; }
+
+.status-label {
+  font-size: 0.78rem;
+  color: var(--accents-3);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.ai-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.lang-select {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--accents-2);
+  font-size: 0.82rem;
+  background: #fff;
+  color: var(--foreground);
+  max-width: 130px;
+  cursor: pointer;
+}
+
+/* Severity Banner */
+.severity-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 2px solid;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  animation: softFadeIn 0.4s ease;
+}
+
+.severity-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.severity-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.severity-summary {
+  font-size: 0.85rem;
+  color: var(--foreground);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.severity-call-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 1rem;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.severity-call-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+/* Per-message severity tag */
+.msg-severity-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  border: 1px solid;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.msg-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: none;
+  text-decoration: underline;
+  transition: opacity 0.2s;
+}
+
+.msg-call-btn:hover {
+  opacity: 0.75;
+  transform: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ============================================
+   HOSPITAL CALL MODAL
+   ============================================ */
+
+.hospital-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.hospital-modal {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.hospital-modal-header {
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 3px solid;
+  text-align: center;
+}
+
+.hospital-severity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.35rem 1rem;
+  border-radius: 20px;
+  margin-bottom: 0.75rem;
+}
+
+.hospital-modal-header h2 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin-bottom: 0.4rem;
+}
+
+.hospital-summary {
+  font-size: 0.85rem;
+  color: var(--accents-3);
+  margin: 0;
+}
+
+.hospital-instruction {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.85rem;
+  color: var(--accents-3);
+  background: #f8f9fa;
+  margin: 0;
+  border-bottom: 1px solid var(--accents-2);
+}
+
+.hospital-list {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.hospital-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: #f8f9fa;
+  border: 1px solid var(--accents-2);
+  border-radius: 14px;
+  transition: all 0.2s ease;
+}
+
+.hospital-item.called {
+  background: rgba(34, 197, 94, 0.06);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.hospital-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hospital-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hospital-location {
+  font-size: 0.75rem;
+  color: var(--accents-3);
+}
+
+.hospital-call-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.5rem 1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.hospital-call-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.hospital-modal-footer {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem 1.5rem;
+  border-top: 1px solid var(--accents-2);
+}
+
+.hospital-close-btn {
+  flex: 1;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  color: var(--foreground);
+  border: 1px solid var(--accents-2);
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hospital-close-btn:hover {
+  background: var(--accents-2);
+  transform: none;
+}
+
+.hospital-emergency-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0.75rem;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.hospital-emergency-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+/* ============================================
+   MOBILE FIXES — AI CHAT HEADER
+   ============================================ */
+
+@media (max-width: 480px) {
+  .ai-chat-header {
+    padding: 0.65rem 1rem;
+    gap: 0.5rem;
+  }
+
+  .ai-header-title {
+    font-size: 0.9rem;
+  }
+
+  .lang-select {
+    max-width: 100px;
+    font-size: 0.75rem;
+    padding: 5px 6px;
+  }
+
+  .severity-summary {
+    max-width: 140px;
+    font-size: 0.78rem;
+  }
+
+  .hospital-modal {
+    border-radius: 16px;
+  }
+
+  .hospital-modal-header {
+    padding: 1.25rem 1rem 0.75rem;
+  }
+
+  .hospital-list {
+    padding: 0.75rem 1rem;
+  }
+
+  .hospital-modal-footer {
+    padding: 0.75rem 1rem 1.25rem;
+  }
+}
+
+/* ============================================
+   MOBILE FIXES — DASHBOARD
+   ============================================ */
+
+@media (max-width: 480px) {
+  .sos-section {
+    padding: 1.5rem 1rem;
+    gap: 1rem;
+  }
+
+  .sos-button {
+    width: 130px;
+    height: 130px;
+  }
+
+  .sos-button span {
+    font-size: 1.2rem;
+  }
+
+  .sos-info h1 {
+    font-size: 1.4rem;
+  }
+
+  .sos-info p {
+    font-size: 0.85rem;
+  }
+
+  .action-card {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .action-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .dashboard-panel {
+    padding: 1.25rem 1rem;
+  }
+
+  .sos-modal {
+    padding: 1.5rem 1.25rem;
+    border-radius: 20px;
+  }
+
+  .sos-modal-header h2 {
+    font-size: 1.15rem;
+  }
+
+  .sos-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .sos-call-btn,
+  .sos-dismiss-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .floating-emergency-btn {
+    bottom: 80px;
+    right: 1rem;
+    width: 52px;
+    height: 52px;
+  }
+}
+
+/* Ensure floating button clears bottom nav on mobile */
+@media (max-width: 768px) {
+  .floating-emergency-btn {
+    bottom: 80px;
+  }
+}

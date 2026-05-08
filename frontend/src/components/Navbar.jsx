@@ -12,53 +12,30 @@ const Navbar = () => {
   };
 
   return (
-    <nav style={{ 
-      background: "rgba(255, 255, 255, 0.8)", 
-      backdropFilter: "blur(10px)", 
-      position: "sticky", 
-      top: 0, 
-      zIndex: 1000,
-      padding: "1rem 4rem"
-    }}>
-      <Link to="/" style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none", color: "var(--foreground)" }}>
+    <nav className="main-navbar">
+      <Link to="/" className="nav-logo">
         <Shield size={28} color="var(--primary)" fill="var(--primary)" fillOpacity={0.1} />
-        <span style={{ fontWeight: 800, fontSize: "1.4rem", letterSpacing: "-0.02em" }}>Sahayaka</span>
+        <span className="logo-text">Sahayaka</span>
       </Link>
-      <div style={{ display: "flex", gap: "32px", alignItems: "center" }}>
-        <Link
-          to="/"
-          style={{
-            color: "var(--accents-3)",
-            textDecoration: "none",
-            fontWeight: "600",
-            fontSize: "0.95rem"
-          }}
-        >
-          Home
+      <div className="nav-links">
+
+        <Link to="/dashboard" className="nav-link">
+          <LayoutDashboard className="mobile-icon" size={20} />
+          <span>Dashboard</span>
         </Link>
-        <Link
-          to="/dashboard"
-          style={{
-            color: "var(--accents-3)",
-            textDecoration: "none",
-            fontWeight: "600",
-            fontSize: "0.95rem"
-          }}
-        >
-          Dashboard
-        </Link>
-        <Link to="/triage">
-          <button style={{ padding: "0.6rem 1.2rem", borderRadius: "10px" }}>
-            Triage AI
-          </button>
+        <Link to="/triage" className="nav-link triage-link">
+          <Activity className="mobile-icon" size={20} />
+          <span className="mobile-label">Triage AI</span>
+          <button className="triage-btn">Triage AI</button>
         </Link>
         {user && (
-          <button 
+          <button
             onClick={handleLogout}
-            className="secondary-btn"
-            style={{ padding: "0.6rem 1.2rem", borderRadius: "10px" }}
+            className="logout-btn"
           >
-            Logout
+            <LogOut className="mobile-icon" size={20} />
+            <span className="mobile-label">Logout</span>
+            <span className="desktop-label">Logout</span>
           </button>
         )}
       </div>

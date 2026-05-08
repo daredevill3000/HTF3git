@@ -168,6 +168,13 @@ const EmergencyButton = () => {
     setSmsStatus(anySuccess ? "sent" : "failed");
   };
 
+  // ── Listen for trigger-sos event from Dashboard SOS button ───────────
+  useEffect(() => {
+    const handler = () => triggerSOS();
+    window.addEventListener("trigger-sos", handler);
+    return () => window.removeEventListener("trigger-sos", handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Trigger SOS ───────────────────────────────────────────────────────
   const triggerSOS = () => {
     setSosActive(true);
@@ -201,15 +208,7 @@ const EmergencyButton = () => {
   return (
     <>
       {/* Floating Emergency Button */}
-      <button
-        className={`floating-emergency-btn ${!locationReady ? "locating" : ""}`}
-        onClick={triggerSOS}
-        aria-label="Emergency SOS"
-        title={locationReady ? "Emergency SOS" : "Acquiring location..."}
-      >
-        <AlertTriangle size={24} />
-        {!locationReady && <span className="locating-label">Locating...</span>}
-      </button>
+     
 
       {/* SOS Modal Overlay */}
       {sosActive && (
