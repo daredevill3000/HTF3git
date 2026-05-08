@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HTF3git</string>
+    <string name="title_activity_main">HTF3git</string>
+    <string name="package_name">com.thundergod.htf3</string>
+    <string name="custom_url_scheme">com.thundergod.htf3</string>
+</resources>
