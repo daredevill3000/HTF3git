@@ -16,16 +16,18 @@
     "android-apk": "npm run build:web && npx cap sync android && npx cap open android"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "7.0.1",
     "@capacitor/android": "^8.3.2",
     "@capacitor/cli": "^8.3.2",
     "@capacitor/core": "^8.3.2",
-    "axios": "^1.16.0",
+    "@capacitor/geolocation": "8.2.0",
     "@google/generative-ai": "^0.24.1",
-    "mqtt": "^5.15.1",
-    "react-markdown": "^10.1.0",
+    "axios": "^1.16.0",
     "lucide-react": "^1.14.0",
+    "mqtt": "^5.15.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.15.0"
   },
   "devDependencies": {

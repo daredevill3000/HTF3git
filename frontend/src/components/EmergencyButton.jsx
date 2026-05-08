@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { AlertTriangle, MapPin, Phone, Ambulance, Shield, CheckCircle, X, Radio } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { Geolocation } from "@capacitor/geolocation";
 
 const nearbyServices = [
   { id: 1, type: "Police",    name: "Gokak Police Station", distance: "1.2 km", eta: "4 min",  phone: "+91-8352-220100", icon: Shield,    color: "#3b82f6" },
@@ -28,25 +29,33 @@ const EmergencyButton = () => {
 
   // Grab GPS on mount
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          setLocation({
-            label: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
-            coords: `${latitude},${longitude}`,
-          });
-        },
-        () => setLocation({ label: "Location unavailable", coords: null })
-      );
-    }
+    const getLocation = async () => {
+      try {
+        // Request permission (required on Android with Capacitor)
+        const permission = await Geolocation.requestPermissions();
+        if (permission.location !== "granted" && permission.coarseLocation !== "granted") {
+          setLocation({ label: "Location permission denied", coords: null });
+          return;
+        }
+        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+        const { latitude, longitude } = pos.coords;
+        setLocation({
+          label: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+          coords: `${latitude},${longitude}`,
+        });
+      } catch (err) {
+        console.error("Geolocation error:", err);
+        setLocation({ label: "Location unavailable", coords: null });
+      }
+    };
+    getLocation();
   }, []);
 
   // ── Send SMS via backend ──────────────────────────────────────────────
   const sendSOSSms = async () => {
     setSmsStatus("sending");
     try {
-      const res = await fetch("http://localhost:5000/api/sos", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/sos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

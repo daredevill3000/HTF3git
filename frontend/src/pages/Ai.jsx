@@ -3,6 +3,7 @@ import mqtt from "mqtt";
 import { Send, Mic, User, Bot, Sparkles, AlertCircle, Loader2, Volume2, VolumeX, MicOff } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from "react-markdown";
+import { SpeechRecognition as CapacitorSpeech } from "@capacitor-community/speech-recognition";
 
 const MQTT_BROKER = "wss://broker.emqx.io:8084/mqtt";
 const TOPIC_SUB = "sahayaka/ai/response";
@@ -39,8 +40,20 @@ const Ai = () => {
   
   const scrollRef = useRef(null);
   const recognitionRef = useRef(null);
+  const isNative = useRef(false); // true when running inside Capacitor on Android
 
-  // Initialize Speech Recognition
+  // Detect if Capacitor native speech is available
+  useEffect(() => {
+    CapacitorSpeech.available()
+      .then(({ available }) => {
+        isNative.current = available;
+      })
+      .catch(() => {
+        isNative.current = false;
+      });
+  }, []);
+
+  // Initialize Web Speech Recognition (browser / desktop fallback)
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -177,13 +190,49 @@ const Ai = () => {
     }
   };
 
-  const toggleMic = () => {
+  const toggleMic = async () => {
     if (isListening) {
-      recognitionRef.current?.stop();
+      // Stop listening
+      if (isNative.current) {
+        await CapacitorSpeech.stop();
+      } else {
+        recognitionRef.current?.stop();
+      }
+      setIsListening(false);
+      return;
+    }
+
+    // Start listening
+    setInput("");
+    setIsListening(true);
+
+    if (isNative.current) {
+      // Request permission first
+      const { speechRecognition } = await CapacitorSpeech.requestPermission();
+      if (speechRecognition !== "granted") {
+        console.error("Microphone permission denied");
+        setIsListening(false);
+        return;
+      }
+      try {
+        const result = await CapacitorSpeech.start({
+          language: language || "en-IN",
+          maxResults: 1,
+          prompt: "Describe your emergency or symptoms",
+          partialResults: false,
+          popup: false,
+        });
+        if (result?.matches?.length > 0) {
+          setInput(result.matches[0]);
+        }
+      } catch (err) {
+        console.error("Capacitor Speech Error:", err);
+      } finally {
+        setIsListening(false);
+      }
     } else {
-      setInput("");
+      // Browser fallback
       recognitionRef.current?.start();
-      setIsListening(true);
     }
   };
 

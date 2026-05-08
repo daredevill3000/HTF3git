@@ -1,9 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const morgan = require("morgan"); // Optional: Logs requests to your console
+const morgan = require("morgan");
 const path = require('path');
-const twilio = require('twilio'); 
+const twilio = require('twilio');
 
 // 1. Load Environment Variables
 dotenv.config();
@@ -13,11 +13,14 @@ const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // 2. Middleware
-app.use(cors()); // Allows your Vite frontend to communicate with this server
-app.use(express.json()); // Essential for handling JSON data from frontend forms/requests
-app.use(morgan("dev")); // Logs "GET / 200" style messages for easier debugging
+app.use(cors({
+  origin: "*", // Allow all origins so the mobile app (file://) can reach the backend
+  methods: ["GET", "POST"],
+}));
+app.use(express.json());
+app.use(morgan("dev"));
 
-// 3. Sample Route
+// 3. Health Check
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "success",
@@ -26,11 +29,10 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Serve frontend static files (built by Vite into frontend/www)
+// 4. Serve frontend static files (built by Vite into frontend/www)
 const frontendDist = path.join(__dirname, '..', 'frontend', 'www');
 app.use(express.static(frontendDist));
 
-// SPA fallback: if request is not for /api, send index.html so the client router can handle routes
 // SPA fallback: for non-API GET requests, serve index.html
 app.use((req, res, next) => {
   if (req.method !== 'GET') return next();
@@ -40,21 +42,6 @@ app.use((req, res, next) => {
     if (err) next(err);
   });
 });
-
-
-
-
-
-
-
-
-// ─── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
-  methods: ["GET", "POST"],
-}));
-app.use(express.json());
-app.use(morgan("dev"));
 
 // ─── Twilio Client ─────────────────────────────────────────────────────────────
 function getTwilioClient() {
@@ -107,15 +94,6 @@ async function sendSMS(recipients, variables) {
 
   return { type: "success", channel: "sms", results };
 }
-
-// ─── Health Check ──────────────────────────────────────────────────────────────
-app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    status: "success",
-    message: "Backend is healthy!",
-    timestamp: new Date().toISOString(),
-  });
-});
 
 // ─── POST /api/sos ─────────────────────────────────────────────────────────────
 app.post("/api/sos", async (req, res) => {
