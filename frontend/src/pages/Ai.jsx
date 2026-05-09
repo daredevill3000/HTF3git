@@ -688,7 +688,7 @@ const Ai = () => {
 
     const formData = new FormData();
     formData.append("file", audioBlob, "audio.wav");
-    formData.append("model", "saaras:v3");
+    formData.append("model", "saaras:v1");
     formData.append("language_code", "unknown"); // Auto-detect language
 
     try {
@@ -737,11 +737,24 @@ const Ai = () => {
     try {
       // For APK: Explicitly request native microphone permissions
       if (Capacitor.isNativePlatform()) {
-        const { speechRecognition } = await CapacitorSpeech.requestPermissions();
-        if (speechRecognition !== "granted") {
-          setError("Microphone permission denied.");
-          return;
+        try {
+          const perm = await CapacitorSpeech.checkPermissions();
+          if (perm.speechRecognition !== "granted") {
+            const req = await CapacitorSpeech.requestPermissions();
+            if (req.speechRecognition !== "granted") {
+              setError("Microphone permission denied.");
+              return;
+            }
+          }
+        } catch (permErr) {
+          console.warn("Permission check failed, proceeding with getUserMedia:", permErr);
         }
+      }
+
+      // Check if MediaRecorder is supported
+      if (!window.MediaRecorder) {
+        setError("Microphone not supported on this device/browser.");
+        return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
