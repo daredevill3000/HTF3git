@@ -21,10 +21,10 @@ const Auth = () => {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    
+
     // Perform login via context
     login(name, mobile, password, aadhaar, stayLoggedIn);
-    
+
     // Redirect to dashboard
     navigate("/dashboard");
   };
@@ -35,14 +35,14 @@ const Auth = () => {
         <div className="auth-gradient-1"></div>
         <div className="auth-gradient-2"></div>
       </div>
-      
+
       <div className="auth-glass-card">
         <div className="auth-header">
           <Shield size={40} className="auth-icon" />
           <h2>Welcome Back</h2>
           <p>Sign in to access your emergency dashboard</p>
         </div>
-        
+
         <form onSubmit={handleLogin} className="auth-form">
           <div className="input-group">
             <label htmlFor="name">Full Name</label>
@@ -55,7 +55,7 @@ const Auth = () => {
               required
             />
           </div>
-          
+
           <div className="input-group">
             <label htmlFor="mobile">Mobile Number</label>
             <input
@@ -92,7 +92,7 @@ const Auth = () => {
               required
             />
           </div>
-          
+
           <div className="checkbox-group">
             <input
               id="stay-logged-in"
@@ -100,14 +100,14 @@ const Auth = () => {
               checked={stayLoggedIn}
               onChange={(e) => setStayLoggedIn(e.target.checked)}
             />
-            <label htmlFor="stay-logged-in">Stay logged in for 30 days</label>
+            <label htmlFor="stay-logged-in">Remember Me</label>
           </div>
-          
+
           <button type="submit" className="login-btn">
             Login as Responder
           </button>
         </form>
-        
+
       </div>
     </div>
   );
