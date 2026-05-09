@@ -687,11 +687,15 @@ const Ai = () => {
     }
 
     const formData = new FormData();
-    formData.append("file", audioBlob, "audio.wav");
+    // Use the actual mime type to determine extension
+    const extension = audioBlob.type.includes('webm') ? 'webm' : 'wav';
+    formData.append("file", audioBlob, `audio.${extension}`);
     formData.append("model", "saaras:v1");
-    formData.append("language_code", "unknown"); // Auto-detect language
+    formData.append("language_code", "unknown");
 
     try {
+      console.log("Sending to Sarvam:", { size: audioBlob.size, type: audioBlob.type, extension });
+      
       const response = await fetch("https://api.sarvam.ai/speech-to-text", {
         method: "POST",
         headers: {
@@ -701,6 +705,8 @@ const Ai = () => {
       });
 
       const data = await response.json();
+      console.log("Sarvam API Response Data:", data);
+
       if (response.ok) {
         const transcript = data.transcript || data.transcript_text;
         if (transcript) {
@@ -719,8 +725,16 @@ const Ai = () => {
           throw new Error("No transcript returned from AI.");
         }
       } else {
-        const errMessage = data.message || data.error || JSON.stringify(data);
-        throw new Error(`Sarvam API Error (${response.status}): ${errMessage}`);
+        // Detailed error extraction
+        let detail = "";
+        if (data.detail) {
+           detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+        } else if (data.message) {
+           detail = data.message;
+        } else {
+           detail = JSON.stringify(data);
+        }
+        throw new Error(`Sarvam Error (${response.status}): ${detail}`);
       }
     } catch (err) {
       console.error("Saaras API Error:", err);
@@ -789,7 +803,14 @@ const Ai = () => {
         if (audioChunksRef.current.length === 0) return;
         
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        // Use .wav extension as a hint for Sarvam, but use actual blob data
+        
+        // Prevent sending tiny/empty files
+        if (audioBlob.size < 500) {
+           console.warn("Recording too short, ignoring.");
+           return;
+        }
+
+        // Use correct extension for the blob
         await handleTranscribe(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
