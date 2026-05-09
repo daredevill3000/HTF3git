@@ -762,9 +762,21 @@ const Ai = () => {
       setIsListening(true);
       setError(null);
     } catch (err) {
-      console.error("Mic error:", err);
+      console.error("Microphone technical error:", err);
+      let userFriendlyMsg = "Microphone access failed.";
+      
+      if (err.name === 'NotAllowedError') {
+        userFriendlyMsg = "Permission denied. Please allow microphone access in settings.";
+      } else if (err.name === 'NotFoundError') {
+        userFriendlyMsg = "No microphone detected on this device.";
+      } else if (err.name === 'SecurityError' || !window.isSecureContext) {
+        userFriendlyMsg = "Secure Context required. Use HTTPS or the APK.";
+      } else if (err.name === 'NotReadableError') {
+        userFriendlyMsg = "Microphone is busy or already in use by another app.";
+      }
+      
+      setError(`${userFriendlyMsg} (${err.name}: ${err.message})`);
       setIsListening(false);
-      setError("Microphone access denied or not available.");
     }
   };
 
