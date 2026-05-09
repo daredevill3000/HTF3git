@@ -673,8 +673,13 @@ const Ai = () => {
     }
 
     const formData = new FormData();
-    const extension = audioBlob.type.includes('webm') ? 'webm' : 'wav';
-    formData.append("file", audioBlob, `audio.${extension}`);
+    // Strip codecs from mime type (e.g., 'audio/webm;codecs=opus' -> 'audio/webm')
+    const mimeType = audioBlob.type.split(';')[0];
+    const extension = mimeType.includes('webm') ? 'webm' : 'wav';
+    
+    // Create a new blob with the clean mime type for the server
+    const cleanBlob = new Blob([audioBlob], { type: mimeType });
+    formData.append("file", cleanBlob, `audio.${extension}`);
     formData.append("model", "saaras:v3");
     formData.append("language_code", "unknown");
 
