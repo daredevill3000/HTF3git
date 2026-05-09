@@ -34,8 +34,7 @@ const Navbar = () => {
             className="logout-btn"
           >
             <LogOut className="mobile-icon" size={20} />
-            <span className="mobile-label">Logout</span>
-            <span className="desktop-label">Logout</span>
+            <span>Logout</span>
           </button>
         )}
       </div>

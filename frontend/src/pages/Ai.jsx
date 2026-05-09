@@ -1,24 +1,19 @@
 import { useState, useEffect, useRef } from "react";
-import mqtt from "mqtt";
 import {
   Send, Mic, User, Bot, Sparkles, AlertCircle, Loader2,
-  Volume2, VolumeX, MicOff, Phone, AlertTriangle, CheckCircle,
+  Volume2, VolumeX, MicOff, Phone,
 } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from "react-markdown";
 import { SpeechRecognition as CapacitorSpeech } from "@capacitor-community/speech-recognition";
 
-const MQTT_BROKER = "wss://broker.emqx.io:8084/mqtt";
-const TOPIC_SUB = "sahayaka/ai/response";
-const TOPIC_PUB = "sahayaka/ai/query";
-
 // ── Hospital database (nearest first) ────────────────────────────────────
 const HOSPITALS = [
-  { name: "Gokak Government Hospital",   phone: "tel:+918352220300", location: "Gokak, Belagavi" },
-  { name: "KLE Hospital Belagavi",        phone: "tel:+918312470000", location: "Belagavi" },
-  { name: "KIMS Hospital Hubli",          phone: "tel:+918362370000", location: "Hubli" },
-  { name: "District Hospital Dharwad",    phone: "tel:+918362447700", location: "Dharwad" },
-  { name: "National Emergency (112)",     phone: "tel:112",           location: "Anywhere" },
+  { name: "Gokak Government Hospital", phone: "tel:+918352220300", location: "Gokak, Belagavi" },
+  { name: "KLE Hospital Belagavi",      phone: "tel:+918312470000", location: "Belagavi" },
+  { name: "KIMS Hospital Hubli",        phone: "tel:+918362370000", location: "Hubli" },
+  { name: "District Hospital Dharwad",  phone: "tel:+918362447700", location: "Dharwad" },
+  { name: "National Emergency (112)",   phone: "tel:112",           location: "Anywhere" },
 ];
 
 // ── Gemini setup ──────────────────────────────────────────────────────────
@@ -28,23 +23,17 @@ const model = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
   systemInstruction: `You are Sahayaka AI, an emergency medical triage assistant for rural India.
 
-When a user describes symptoms or an emergency, respond with a JSON object in this EXACT format (no markdown, no extra text):
-{
-  "severity": "CRITICAL" | "URGENT" | "MODERATE" | "LOW",
-  "advice": "Your clear, calm, step-by-step advice here in plain text",
-  "callHospital": true | false,
-  "summary": "One-line summary of the situation"
-}
+When a user describes symptoms or an emergency, respond with a JSON object in this EXACT format (no markdown fences, no extra text, just raw JSON):
+{"severity":"CRITICAL","advice":"your advice here","callHospital":true,"summary":"one line summary"}
 
-Severity guidelines:
+Severity levels:
 - CRITICAL: Life-threatening (cardiac arrest, severe bleeding, unconscious, stroke, severe burns, drowning, snake bite with symptoms)
-- URGENT: Needs hospital within 1-2 hours (fractures, high fever >104°F, severe pain, difficulty breathing)
+- URGENT: Needs hospital within 1-2 hours (fractures, high fever >104F, severe pain, difficulty breathing)
 - MODERATE: Needs medical attention today (moderate fever, wounds, vomiting, mild breathing issues)
-- LOW: Can be managed at home with guidance (minor cuts, mild fever, headache, cold)
+- LOW: Can be managed at home (minor cuts, mild fever, headache, cold)
 
-Set callHospital=true only for CRITICAL or URGENT cases.
-Always include a disclaimer at the end of advice to call 112 for real emergencies.
-Keep advice concise and actionable. Use simple language.`,
+Set callHospital=true only for CRITICAL or URGENT.
+Keep advice concise, calm, step-by-step. End with: "Call 112 for real emergencies."`,
 });
 
 const LANGUAGES = [
@@ -58,24 +47,21 @@ const LANGUAGES = [
 ];
 
 const SEVERITY_CONFIG = {
-  CRITICAL: { color: "#ef4444", bg: "rgba(239,68,68,0.1)",  label: "CRITICAL",  icon: "🚨" },
-  URGENT:   { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "URGENT",    icon: "⚠️" },
-  MODERATE: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)", label: "MODERATE",  icon: "ℹ️" },
-  LOW:      { color: "#22c55e", bg: "rgba(34,197,94,0.1)",  label: "LOW",       icon: "✅" },
+  CRITICAL: { color: "#ef4444", bg: "rgba(239,68,68,0.1)",  label: "CRITICAL", icon: "🚨" },
+  URGENT:   { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "URGENT",   icon: "⚠️" },
+  MODERATE: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)", label: "MODERATE", icon: "ℹ️" },
+  LOW:      { color: "#22c55e", bg: "rgba(34,197,94,0.1)",  label: "LOW",      icon: "✅" },
 };
 
 // ── Hospital Call Modal ───────────────────────────────────────────────────
 const HospitalCallModal = ({ severity, summary, onClose }) => {
-  const [calledIndex, setCalledIndex] = useState(null);
   const [calledList, setCalledList] = useState([]);
+  const cfg = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.URGENT;
 
   const callHospital = (index) => {
-    setCalledIndex(index);
     setCalledList((prev) => [...new Set([...prev, index])]);
     window.location.href = HOSPITALS[index].phone;
   };
-
-  const cfg = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.URGENT;
 
   return (
     <div className="hospital-modal-overlay" role="dialog" aria-modal="true">
@@ -87,11 +73,9 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
           <h2>Call Nearest Hospital</h2>
           {summary && <p className="hospital-summary">{summary}</p>}
         </div>
-
         <p className="hospital-instruction">
           Tap a hospital to call. If unavailable, try the next one.
         </p>
-
         <div className="hospital-list">
           {HOSPITALS.map((h, i) => (
             <div key={i} className={`hospital-item ${calledList.includes(i) ? "called" : ""}`}>
@@ -110,11 +94,8 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
             </div>
           ))}
         </div>
-
         <div className="hospital-modal-footer">
-          <button className="hospital-close-btn" onClick={onClose}>
-            Close
-          </button>
+          <button className="hospital-close-btn" onClick={onClose}>Close</button>
           <a href="tel:112" className="hospital-emergency-btn">
             <Phone size={16} /> Call 112 Now
           </a>
@@ -128,7 +109,6 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
 const SeverityBanner = ({ severity, summary, onCallHospital }) => {
   const cfg = SEVERITY_CONFIG[severity];
   if (!cfg) return null;
-
   return (
     <div className="severity-banner" style={{ background: cfg.bg, borderColor: cfg.color }}>
       <div className="severity-banner-left">
@@ -160,18 +140,24 @@ const Ai = () => {
     () => localStorage.getItem("sahayaka_lang") || "en-IN"
   );
   const [input, setInput] = useState("");
-  const [client, setClient] = useState(null);
-  const [status, setStatus] = useState("connecting");
   const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isSoundOn, setIsSoundOn] = useState(true);
   const [currentSeverity, setCurrentSeverity] = useState(null);
   const [currentSummary, setCurrentSummary] = useState("");
   const [showHospitalModal, setShowHospitalModal] = useState(false);
+  const [error, setError] = useState(null);
 
   const scrollRef = useRef(null);
   const recognitionRef = useRef(null);
   const isNative = useRef(false);
+  // Keep a persistent Gemini chat session so it remembers conversation history
+  const chatRef = useRef(null);
+
+  // Init Gemini chat session once
+  useEffect(() => {
+    chatRef.current = model.startChat({ history: [] });
+  }, []);
 
   // Detect Capacitor native speech
   useEffect(() => {
@@ -182,9 +168,9 @@ const Ai = () => {
 
   // Web Speech Recognition fallback
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      recognitionRef.current = new SR();
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
       recognitionRef.current.lang = language;
@@ -197,24 +183,11 @@ const Ai = () => {
     }
   }, []);
 
+  // Update recognition language
   useEffect(() => {
     if (recognitionRef.current) recognitionRef.current.lang = language;
     localStorage.setItem("sahayaka_lang", language);
   }, [language]);
-
-  const speak = (text) => {
-    if (!isSoundOn) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const preferred =
-      voices.find((v) => v.lang?.toLowerCase().startsWith(language.split("-")[0])) ||
-      voices.find((v) => v.name?.includes("Google") && v.lang?.includes("en")) ||
-      voices[0];
-    if (preferred) utterance.voice = preferred;
-    utterance.rate = 1.0;
-    window.speechSynthesis.speak(utterance);
-  };
 
   // Auto-scroll
   useEffect(() => {
@@ -223,63 +196,76 @@ const Ai = () => {
     }
   }, [messages, isTyping]);
 
-  // MQTT
-  useEffect(() => {
-    const mqttClient = mqtt.connect(MQTT_BROKER, {
-      clientId: `sahayaka_${Math.random().toString(16).slice(3)}`,
-    });
-    mqttClient.on("connect", () => {
-      setStatus("connected");
-      mqttClient.subscribe(TOPIC_SUB);
-    });
-    mqttClient.on("error", () => setStatus("error"));
-    setClient(mqttClient);
-    return () => {
-      mqttClient.end();
+  const speak = (text) => {
+    if (!isSoundOn) return;
+    try {
       window.speechSynthesis.cancel();
-    };
-  }, [isSoundOn]);
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find((v) => v.lang?.toLowerCase().startsWith(language.split("-")[0])) ||
+        voices.find((v) => v.name?.includes("Google") && v.lang?.includes("en")) ||
+        voices[0];
+      if (preferred) utterance.voice = preferred;
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) { console.error("Synthesis error", e); }
+  };
 
   // ── Parse AI response ─────────────────────────────────────────────────
   const parseAIResponse = (raw) => {
     try {
-      // Strip markdown code fences if present
-      const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      if (parsed.severity && parsed.advice) return parsed;
+      // Strip any markdown fences Gemini might add despite instructions
+      const cleaned = raw
+        .replace(/```json\s*/gi, "")
+        .replace(/```\s*/g, "")
+        .trim();
+      // Extract first JSON object found
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (parsed.advice) return parsed;
+      }
     } catch (_) {
-      // Not JSON — treat as plain advice
+      // fall through
     }
     return { severity: null, advice: raw, callHospital: false, summary: "" };
   };
 
   // ── Send message ──────────────────────────────────────────────────────
   const handleSend = async () => {
-    if (!input.trim() || !client) return;
+    const trimmed = input.trim();
+    if (!trimmed || isTyping) return;
 
-    const userMsg = { id: Date.now(), role: "user", content: input, severity: null };
+    const userMsg = { id: Date.now(), role: "user", content: trimmed, severity: null };
     setMessages((prev) => [...prev, userMsg]);
-    const userInput = input;
     setInput("");
     setIsTyping(true);
-    window.speechSynthesis.cancel();
-
-    client.publish(TOPIC_PUB, userInput);
+    setError(null);
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) { console.error("Speech sync error", e); }
 
     try {
       const langLabel = LANGUAGES.find((l) => l.code === language)?.label || "English";
-      const prompt = `Respond in ${langLabel}. User says: ${userInput}`;
-      const result = await model.generateContent(prompt);
+      const prompt = `Respond in ${langLabel}. User says: ${trimmed}`;
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("AI request timed out. Please check your internet connection or try again.")), 15000)
+      );
+
+      const result = await Promise.race([
+        chatRef.current.sendMessage(prompt),
+        timeoutPromise
+      ]);
       const rawText = result.response.text();
 
       const parsed = parseAIResponse(rawText);
       const { severity, advice, callHospital, summary } = parsed;
 
-      // Update severity state
       if (severity) {
         setCurrentSeverity(severity);
         setCurrentSummary(summary || "");
-        // Auto-show hospital modal for CRITICAL
         if (severity === "CRITICAL" && callHospital) {
           setTimeout(() => setShowHospitalModal(true), 1500);
         }
@@ -289,22 +275,29 @@ const Ai = () => {
         id: Date.now() + 1,
         role: "bot",
         content: advice,
-        severity,
-        summary,
+        severity: severity || null,
+        summary: summary || "",
       };
       setMessages((prev) => [...prev, botMsg]);
-      speak(advice);
-
-      client.publish(TOPIC_SUB, JSON.stringify({ text: advice, lang: language }));
+      try {
+        speak(advice);
+      } catch (e) { console.error("Speak error", e); }
     } catch (err) {
       console.error("Gemini Error:", err);
-      const errMsg = {
-        id: Date.now() + 1,
-        role: "bot",
-        content: "I'm having trouble connecting right now. Please try again, or call 112 for emergencies.",
-        severity: null,
-      };
-      setMessages((prev) => [...prev, errMsg]);
+      let errorMessage = "Could not reach AI. Check your internet connection.";
+      if (err.message?.includes("429") || err.message?.includes("quota")) {
+        errorMessage = "The AI system is currently busy or has exceeded its quota limit. Please try again in a few moments.";
+      }
+      setError(errorMessage);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: "bot",
+          content: `I'm having trouble connecting right now (${errorMessage}). Please call **112** for emergencies.`,
+          severity: null,
+        },
+      ]);
     } finally {
       setIsTyping(false);
     }
@@ -353,8 +346,8 @@ const Ai = () => {
           <div>
             <h2 className="ai-header-title">Medical Triage AI</h2>
             <div className="ai-status-row">
-              <div className={`status-dot ${status}`}></div>
-              <span className="status-label">{status}</span>
+              <div className="status-dot connected"></div>
+              <span className="status-label">Gemini 2.5 Flash</span>
             </div>
           </div>
         </div>
@@ -431,15 +424,17 @@ const Ai = () => {
         ))}
 
         {isTyping && (
-          <div className="chat-bubble bot typing-indicator">
+          <div className="chat-bubble bot" style={{ display: "flex", alignItems: "center", gap: "12px", padding: "1rem 1.25rem" }}>
             <Loader2 size={18} className="animate-spin" />
-            <span>Sahayaka is analyzing...</span>
+            <span style={{ fontSize: "0.95rem", color: "var(--accents-3)", fontWeight: 500 }}>
+              Sahayaka is analyzing...
+            </span>
           </div>
         )}
 
-        {status === "error" && (
+        {error && (
           <div className="connection-error">
-            <AlertCircle size={16} /> Connection lost. Retrying...
+            <AlertCircle size={16} /> {error}
           </div>
         )}
       </div>
@@ -461,13 +456,13 @@ const Ai = () => {
             placeholder={isListening ? "Listening..." : "Describe symptoms (e.g. 'sharp chest pain')..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => e.key === "Enter" && !isTyping && handleSend()}
           />
 
           <button
             className="chat-action-btn chat-send-btn"
             onClick={handleSend}
-            disabled={!input.trim() || status !== "connected" || isTyping}
+            disabled={!input.trim() || isTyping}
           >
             <Send size={20} />
           </button>

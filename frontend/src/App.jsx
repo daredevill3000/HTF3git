@@ -1,4 +1,6 @@
-import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, Navigate, useNavigate } from "react-router-dom";
+import { App as CapacitorApp } from "@capacitor/app";
+import { useEffect } from "react";
 import Navbar from "./components/Navbar";
 import EmergencyButton from "./components/EmergencyButton";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -10,8 +12,25 @@ import Ai from "./pages/Ai";
 
 function AppContent() {
   const location = useLocation();
+  const navigate = useNavigate();
   const hideNavPaths = ["/", "/auth"];
   const showNav = !hideNavPaths.includes(location.pathname);
+
+  useEffect(() => {
+    const handleBackButton = () => {
+      if (location.pathname === '/' || location.pathname === '/auth' || location.pathname === '/dashboard') {
+        CapacitorApp.exitApp();
+      } else {
+        navigate(-1);
+      }
+    };
+
+    const backListener = CapacitorApp.addListener('backButton', handleBackButton);
+    
+    return () => {
+      backListener.then(listener => listener.remove());
+    };
+  }, [location.pathname, navigate]);
 
   return (
     <div className="app-container">
