@@ -612,14 +612,23 @@ const Ai = () => {
 
       // Live AI Logic
       const currentModel = getGenerativeModel(apiKey);
-      const chatSession = currentModel.startChat({
-        history: messages
-          .slice(-6) // Only send last 3 exchanges to save tokens
-          .filter(m => m.role !== "system" && m.content)
-          .map(m => ({
-            role: m.role === "user" ? "user" : "model",
-            parts: [{ text: m.content }],
-          }))
+      
+      // Gemini history MUST start with a 'user' message. 
+      // Filter out system/welcome messages and find the first user message.
+      const rawHistory = messages
+        .filter(m => m.content && !m.content.includes("Hello! I'm Sahayaka AI")) // Skip welcome
+        .map(m => ({
+          role: m.role === "user" ? "user" : "model",
+          parts: [{ text: m.content }],
+        }));
+
+      let finalHistory = rawHistory.slice(-6);
+      if (finalHistory.length > 0 && finalHistory[0].role !== "user") {
+        finalHistory.shift();
+      }
+
+      const chatSession = currentModel.startChat({ 
+        history: finalHistory
       });
 
       const result = await chatSession.sendMessage(textToSend);
