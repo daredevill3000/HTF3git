@@ -4,8 +4,10 @@ import { Shield } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const Auth = () => {
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
+  const [aadhaar, setAadhaar] = useState("");
   const [stayLoggedIn, setStayLoggedIn] = useState(false);
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
@@ -21,7 +23,7 @@ const Auth = () => {
     e.preventDefault();
     
     // Perform login via context
-    login(email, stayLoggedIn);
+    login(name, mobile, password, aadhaar, stayLoggedIn);
     
     // Redirect to dashboard
     navigate("/dashboard");
@@ -43,17 +45,29 @@ const Auth = () => {
         
         <form onSubmit={handleLogin} className="auth-form">
           <div className="input-group">
-            <label htmlFor="email">Email Address</label>
+            <label htmlFor="name">Full Name</label>
             <input
-              id="email"
-              type="email"
-              placeholder="responder@sahayaka.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="name"
+              type="text"
+              placeholder="Responder Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               required
             />
           </div>
           
+          <div className="input-group">
+            <label htmlFor="mobile">Mobile Number</label>
+            <input
+              id="mobile"
+              type="tel"
+              placeholder="Enter your mobile number"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              required
+            />
+          </div>
+
           <div className="input-group">
             <label htmlFor="password">Password</label>
             <input
@@ -62,6 +76,19 @@ const Auth = () => {
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="aadhaar">Aadhaar Number</label>
+            <input
+              id="aadhaar"
+              type="text"
+              placeholder="1234 5678 9012"
+              value={aadhaar}
+              onChange={(e) => setAadhaar(e.target.value)}
+              maxLength={12}
               required
             />
           </div>
@@ -81,11 +108,6 @@ const Auth = () => {
           </button>
         </form>
         
-        <div className="auth-footer">
-          <p>
-            Don't have an account? <span className="signup-link">Sign Up</span>
-          </p>
-        </div>
       </div>
     </div>
   );

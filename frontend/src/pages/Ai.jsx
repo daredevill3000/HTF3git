@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Send, Mic, User, Bot, Sparkles, AlertCircle, Loader2,
-  Volume2, VolumeX, MicOff, Phone, MapPin, Map, Square
+  Volume2, VolumeX, MicOff, Phone, MapPin, Map,
 } from "lucide-react";
 import { Geolocation } from "@capacitor/geolocation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -444,19 +444,8 @@ const Ai = () => {
   const chatRef = useRef(null);
 
   // Init Gemini chat session once
-  const initChat = () => {
-    try {
-      if (GEN_AI_KEY && !chatRef.current) {
-        chatRef.current = model.startChat({ history: [] });
-      }
-    } catch (e) {
-      console.error("Gemini init failed", e);
-      setError("AI setup failed. Verify your API key.");
-    }
-  };
-
   useEffect(() => {
-    initChat();
+    chatRef.current = model.startChat({ history: [] });
   }, []);
 
   // Update recognition language
@@ -619,9 +608,6 @@ const Ai = () => {
         setTimeout(() => reject(new Error("AI request timed out. Please check your internet connection or try again.")), 15000)
       );
 
-      if (!chatRef.current) initChat();
-      if (!chatRef.current) throw new Error("AI not initialized. Check API key.");
-
       const result = await Promise.race([
         chatRef.current.sendMessage(prompt),
         timeoutPromise
@@ -657,21 +643,11 @@ const Ai = () => {
         await speakWithBulbul(advice, activeLanguage);
       } catch (e) { console.error("Speak error", e); }
     } catch (err) {
-      console.error("Gemini Technical Error:", err);
+      console.error("Gemini Error:", err);
       let errorMessage = "Could not reach AI. Check your internet connection.";
-      const errorStr = err.message || "";
-      
-      if (errorStr.includes("429") || errorStr.includes("quota")) {
-        errorMessage = "The AI system is currently busy or has exceeded its quota limit.";
-      } else if (errorStr.includes("403") || errorStr.includes("leaked") || errorStr.includes("API_KEY_INVALID")) {
-        errorMessage = "Invalid or leaked API key. Please check your .env configuration.";
-      } else if (errorStr.includes("First content should be with role 'user'")) {
-        errorMessage = "Chat context error. Please refresh the page.";
-        chatRef.current = null; // Force re-init on next attempt
-      } else if (err.name === "GoogleGenerativeAIError" || err.name === "GoogleGenerativeAIFetchError") {
-        errorMessage = `AI Error: ${errorStr.substring(0, 100)}`;
+      if (err.message?.includes("429") || err.message?.includes("quota")) {
+        errorMessage = "The AI system is currently busy or has exceeded its quota limit. Please try again in a few moments.";
       }
-      
       setError(errorMessage);
       setMessages((prev) => [
         ...prev,
@@ -697,52 +673,44 @@ const Ai = () => {
     }
 
     const formData = new FormData();
-    // Strip codecs from mime type (e.g., 'audio/webm;codecs=opus' -> 'audio/webm')
-    const mimeType = audioBlob.type.split(';')[0];
-    const extension = mimeType.includes('webm') ? 'webm' : 'wav';
-    
-    // Create a new blob with the clean mime type for the server
-    const cleanBlob = new Blob([audioBlob], { type: mimeType });
-    formData.append("file", cleanBlob, `audio.${extension}`);
+    formData.append("file", audioBlob, "audio.wav");
     formData.append("model", "saaras:v3");
-    formData.append("language_code", "unknown");
+    formData.append("language_code", "unknown"); // Auto-detect language
 
     try {
-      console.log("Sending to Sarvam:", { size: audioBlob.size, type: audioBlob.type });
       const response = await fetch("https://api.sarvam.ai/speech-to-text", {
         method: "POST",
-        headers: { "api-subscription-key": apiKey },
+        headers: {
+          "api-subscription-key": apiKey
+        },
         body: formData
       });
 
       const data = await response.json();
-      if (response.ok) {
-        const transcript = data.transcript || data.transcript_text;
-        if (transcript) {
-          let detectedLang = language;
-          if (data.language_code) {
-            const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
-            if (matchedLang) {
-              setLanguage(data.language_code);
-              detectedLang = data.language_code;
-            }
+      if (response.ok && data.transcript) {
+        let detectedLang = language;
+        if (data.language_code) {
+          const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
+          if (matchedLang) {
+            setLanguage(data.language_code);
+            detectedLang = data.language_code;
           }
-          setInput(transcript);
-          handleSend(transcript, detectedLang);
-        } else {
-          throw new Error("No transcript returned.");
         }
+        
+        setInput(data.transcript);
+        // Automatically send the transcribed text
+        handleSend(data.transcript, detectedLang);
       } else {
-        const detail = data.detail || data.message || JSON.stringify(data);
-        throw new Error(`Sarvam Error (${response.status}): ${detail}`);
+        throw new Error(data.message || "Failed to transcribe audio");
       }
     } catch (err) {
       console.error("Saaras API Error:", err);
-      setError(err.message);
+      setError("Could not transcribe audio. " + err.message);
       setIsTyping(false);
     }
   };
 
+  // ── Mic toggle ────────────────────────────────────────────────────────
   const toggleMic = async () => {
     if (isListening) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -753,37 +721,30 @@ const Ai = () => {
     }
 
     try {
-      if (!window.isSecureContext && !Capacitor.isNativePlatform()) {
-        setError("Microphone requires HTTPS or localhost. Use the APK on mobile.");
-        return;
-      }
-
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const perm = await CapacitorSpeech.checkPermissions();
-          if (perm.speechRecognition !== "granted") {
-            const req = await CapacitorSpeech.requestPermissions();
-            if (req.speechRecognition !== "granted") {
-              setError("Permission denied.");
-              return;
-            }
-          }
-        } catch (e) { console.warn("Native perm check failed", e); }
+      // For APK: Explicitly request native microphone permissions
+      if (window.Capacitor) {
+        const { speechRecognition } = await CapacitorSpeech.requestPermissions();
+        if (speechRecognition !== "granted") {
+          setError("Microphone permission denied.");
+          return;
+        }
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      
+      const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
       mediaRecorder.onstop = async () => {
-        if (audioChunksRef.current.length === 0) return;
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        if (audioBlob.size > 500) await handleTranscribe(audioBlob);
-        stream.getTracks().forEach(t => t.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        await handleTranscribe(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorder.start();
@@ -791,21 +752,9 @@ const Ai = () => {
       setIsListening(true);
       setError(null);
     } catch (err) {
-      console.error("Microphone technical error:", err);
-      let userFriendlyMsg = "Microphone access failed.";
-      
-      if (err.name === 'NotAllowedError') {
-        userFriendlyMsg = "Permission denied. Please allow microphone access in settings.";
-      } else if (err.name === 'NotFoundError') {
-        userFriendlyMsg = "No microphone detected on this device.";
-      } else if (err.name === 'SecurityError' || !window.isSecureContext) {
-        userFriendlyMsg = "Secure Context required. Use HTTPS or the APK.";
-      } else if (err.name === 'NotReadableError') {
-        userFriendlyMsg = "Microphone is busy or already in use by another app.";
-      }
-      
-      setError(`${userFriendlyMsg} (${err.name}: ${err.message})`);
+      console.error("Microphone access denied:", err);
       setIsListening(false);
+      setError("Microphone access denied or not available.");
     }
   };
 

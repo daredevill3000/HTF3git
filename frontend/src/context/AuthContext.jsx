@@ -13,16 +13,17 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = () => {
       const stayLoggedIn = localStorage.getItem("stayLoggedIn");
       const loginExpiry = localStorage.getItem("loginExpiry");
-      const userEmail = localStorage.getItem("userEmail");
+      const userName = localStorage.getItem("userName");
+      const userAadhaar = localStorage.getItem("userAadhaar");
 
-      if (stayLoggedIn === "true" && loginExpiry && userEmail) {
+      if (stayLoggedIn === "true" && loginExpiry && userName) {
         const expiryTime = parseInt(loginExpiry, 10);
         const now = Date.now();
 
         // Check if session is still valid
         if (now < expiryTime) {
           setIsAuthenticated(true);
-          setUser({ email: userEmail });
+          setUser({ name: userName, aadhaar: userAadhaar });
         } else {
           // Session expired, clear storage
           logout();
@@ -34,10 +35,11 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, []);
 
-  const login = (email, stayLoggedIn = false) => {
+  const login = (name, mobile, password, aadhaar, stayLoggedIn = false) => {
     setIsAuthenticated(true);
-    setUser({ email });
-    localStorage.setItem("userEmail", email);
+    setUser({ name, aadhaar });
+    localStorage.setItem("userName", name);
+    localStorage.setItem("userAadhaar", aadhaar);
 
     if (stayLoggedIn) {
       localStorage.setItem("stayLoggedIn", "true");
@@ -52,7 +54,8 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setIsAuthenticated(false);
     setUser(null);
-    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userAadhaar");
     localStorage.removeItem("stayLoggedIn");
     localStorage.removeItem("loginExpiry");
   };
