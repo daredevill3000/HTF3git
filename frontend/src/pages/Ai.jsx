@@ -444,8 +444,19 @@ const Ai = () => {
   const chatRef = useRef(null);
 
   // Init Gemini chat session once
+  const initChat = () => {
+    try {
+      if (GEN_AI_KEY && !chatRef.current) {
+        chatRef.current = model.startChat({ history: [] });
+      }
+    } catch (e) {
+      console.error("Gemini init failed", e);
+      setError("AI setup failed. Verify your API key.");
+    }
+  };
+
   useEffect(() => {
-    chatRef.current = model.startChat({ history: [] });
+    initChat();
   }, []);
 
   // Update recognition language
@@ -608,6 +619,9 @@ const Ai = () => {
         setTimeout(() => reject(new Error("AI request timed out. Please check your internet connection or try again.")), 15000)
       );
 
+      if (!chatRef.current) initChat();
+      if (!chatRef.current) throw new Error("AI not initialized. Check API key.");
+
       const result = await Promise.race([
         chatRef.current.sendMessage(prompt),
         timeoutPromise
@@ -643,11 +657,21 @@ const Ai = () => {
         await speakWithBulbul(advice, activeLanguage);
       } catch (e) { console.error("Speak error", e); }
     } catch (err) {
-      console.error("Gemini Error:", err);
+      console.error("Gemini Technical Error:", err);
       let errorMessage = "Could not reach AI. Check your internet connection.";
-      if (err.message?.includes("429") || err.message?.includes("quota")) {
-        errorMessage = "The AI system is currently busy or has exceeded its quota limit. Please try again in a few moments.";
+      const errorStr = err.message || "";
+      
+      if (errorStr.includes("429") || errorStr.includes("quota")) {
+        errorMessage = "The AI system is currently busy or has exceeded its quota limit.";
+      } else if (errorStr.includes("403") || errorStr.includes("leaked") || errorStr.includes("API_KEY_INVALID")) {
+        errorMessage = "Invalid or leaked API key. Please check your .env configuration.";
+      } else if (errorStr.includes("First content should be with role 'user'")) {
+        errorMessage = "Chat context error. Please refresh the page.";
+        chatRef.current = null; // Force re-init on next attempt
+      } else if (err.name === "GoogleGenerativeAIError" || err.name === "GoogleGenerativeAIFetchError") {
+        errorMessage = `AI Error: ${errorStr.substring(0, 100)}`;
       }
+      
       setError(errorMessage);
       setMessages((prev) => [
         ...prev,
