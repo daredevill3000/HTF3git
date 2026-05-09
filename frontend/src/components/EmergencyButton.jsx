@@ -175,15 +175,16 @@ const EmergencyButton = () => {
       ? `maps.google.com/?q=${currentLocation.coords}`
       : null;
     const time = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
-    const name = (user?.email || "User").split("@")[0];
+    const name = (user?.name || "User");
+    const last4Aadhaar = user?.aadhaar ? user.aadhaar.slice(-4) : "N/A";
 
-    let body = `SOS! ${name} needs help. ${currentLocation.label}.`;
+    let body = `SOS! ${name} (ID:..${last4Aadhaar}) needs help. ${currentLocation.label}.`;
     if (mapLink) body += ` ${mapLink}.`;
     body += ` Time: ${time}. -Sahayaka`;
 
     // Trim to 155 chars if still too long (safety margin)
     if (body.length > 155) {
-      body = `SOS! ${name} needs help. ${mapLink || currentLocation.label}. Time: ${time}. -Sahayaka`;
+      body = `SOS! ${name} (ID:..${last4Aadhaar}) needs help. ${mapLink || currentLocation.label}. Time: ${time}. -Sahayaka`;
     }
 
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
