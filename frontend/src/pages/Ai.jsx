@@ -690,7 +690,7 @@ const Ai = () => {
     // Use the actual mime type to determine extension
     const extension = audioBlob.type.includes('webm') ? 'webm' : 'wav';
     formData.append("file", audioBlob, `audio.${extension}`);
-    formData.append("model", "saaras:v1");
+    formData.append("model", "saaras:v3");
     formData.append("language_code", "unknown");
 
     try {
