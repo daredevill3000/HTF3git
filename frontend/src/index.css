@@ -2305,6 +2305,50 @@ button:active {
 }
 
 /* ============================================
+   SOS MODAL & NOTIFICATIONS
+   ============================================ */
+
+.sos-modal {
+  background: white;
+  width: 90%;
+  max-width: 450px;
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 2001;
+  max-height: 85vh;
+  overflow-y: auto; /* Scroll for the whole modal */
+}
+
+.sos-notifications {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 250px; /* Specific height for the status list */
+  overflow-y: auto; /* Scroll for backend status messages */
+  padding-right: 8px; /* Space for scrollbar */
+}
+
+/* Custom scrollbar for a premium feel */
+.sos-modal::-webkit-scrollbar,
+.sos-notifications::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sos-modal::-webkit-scrollbar-thumb,
+.sos-notifications::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+.sos-modal::-webkit-scrollbar-thumb:hover,
+.sos-notifications::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ============================================
    SOS LOCATION ROW & SMS STATUS BADGE
    ============================================ */
 
@@ -2368,6 +2412,11 @@ button:active {
 .sms-failed {
   background: rgba(239, 68, 68, 0.1);
   color: #dc2626;
+}
+
+.sms-fallback {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
 }
 
 .sms-dot {

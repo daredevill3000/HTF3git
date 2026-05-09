@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, MapPin, Phone, Ambulance, Shield, CheckCircle, X, Radio } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Geolocation } from "@capacitor/geolocation";
+import { SmsManager } from "@byteowls/capacitor-sms";
 
 const nearbyServices = [
   { id: 1, type: "Police",    name: "Gokak Police Station", distance: "1.2 km", eta: "4 min",  phone: "+91-8352-220100", icon: Shield,    color: "#3b82f6" },
@@ -165,6 +166,25 @@ const EmergencyButton = () => {
       }
     }
 
+    if (!anySuccess) {
+      console.warn("🌐 Twilio SMS failed, falling back to Native SMS (Internal Messenger)...");
+      setSmsStatus("fallback");
+      
+      try {
+        await SmsManager.send({
+          numbers: contacts.map(c => c.startsWith("+") ? c : `+${c}`),
+          text: body,
+          android: {
+            intent: "com.android.mms.intent.action.SENDTO" // Explicitly target messenger
+          }
+        });
+        console.log("📲 Native SMS triggered successfully");
+        anySuccess = true;
+      } catch (err) {
+        console.error("❌ Native SMS fallback failed:", err.message);
+      }
+    }
+
     setSmsStatus(anySuccess ? "sent" : "failed");
   };
 
@@ -227,6 +247,7 @@ const EmergencyButton = () => {
               <div className={`sms-status-badge sms-${smsStatus || "idle"}`}>
                 {smsStatus === "sending" && <><span className="sms-dot"></span> Sending SMS alerts...</>}
                 {smsStatus === "sent"    && <><CheckCircle size={13} /> SMS alerts delivered</>}
+                {smsStatus === "fallback" && <><Radio size={13} /> Using Internal Messenger...</>}
                 {smsStatus === "failed"  && <>⚠ SMS failed — check backend</>}
               </div>
 

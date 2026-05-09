@@ -16,6 +16,7 @@
     "android-apk": "npm run build:web && npx cap sync android && npx cap open android"
   },
   "dependencies": {
+    "@byteowls/capacitor-sms": "^7.0.0",
     "@capacitor-community/speech-recognition": "7.0.1",
     "@capacitor/android": "^8.3.2",
     "@capacitor/app": "^8.1.0",
