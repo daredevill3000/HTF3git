@@ -2738,6 +2738,55 @@ button:active {
   color: var(--accents-3);
 }
 
+.hospital-map-container {
+  position: relative;
+  margin: 0 1.5rem 1rem;
+  background: #f0f0f0;
+  border-radius: 12px;
+  overflow: hidden;
+  height: 180px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.map-overlay-info {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  z-index: 5;
+}
+
+.hospital-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.map-indicator-icon {
+  color: var(--accents-3);
+  opacity: 0.5;
+}
+
+.hospital-item.selected {
+  border-color: var(--primary);
+  background: rgba(230, 57, 70, 0.03);
+  box-shadow: 0 4px 12px rgba(230, 57, 70, 0.08);
+}
+
+.hospital-item.selected .map-indicator-icon {
+  color: var(--primary);
+  opacity: 1;
+}
+
 .hospital-call-btn {
   display: flex;
   align-items: center;

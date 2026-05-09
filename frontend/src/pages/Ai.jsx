@@ -1,19 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Send, Mic, User, Bot, Sparkles, AlertCircle, Loader2,
-  Volume2, VolumeX, MicOff, Phone,
+  Volume2, VolumeX, MicOff, Phone, MapPin, Map,
 } from "lucide-react";
+import { Geolocation } from "@capacitor/geolocation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from "react-markdown";
 import { SpeechRecognition as CapacitorSpeech } from "@capacitor-community/speech-recognition";
 
 // ── Hospital database (nearest first) ────────────────────────────────────
 const HOSPITALS = [
-  { name: "Gokak Government Hospital", phone: "tel:+918352220300", location: "Gokak, Belagavi" },
-  { name: "KLE Hospital Belagavi",      phone: "tel:+918312470000", location: "Belagavi" },
-  { name: "KIMS Hospital Hubli",        phone: "tel:+918362370000", location: "Hubli" },
-  { name: "District Hospital Dharwad",  phone: "tel:+918362447700", location: "Dharwad" },
-  { name: "National Emergency (112)",   phone: "tel:112",           location: "Anywhere" },
+  { name: "Gokak Government Hospital", phone: "tel:+918352220300", location: "Gokak, Belagavi", lat: 16.1667, lng: 74.8333 },
+  { name: "KLE Hospital Belagavi",      phone: "tel:+918312470000", location: "Belagavi",        lat: 15.8677, lng: 74.5089 },
+  { name: "KIMS Hospital Hubli",        phone: "tel:+918362370000", location: "Hubli",           lat: 15.3647, lng: 75.1240 },
+  { name: "District Hospital Dharwad",  phone: "tel:+918362447700", location: "Dharwad",         lat: 15.4589, lng: 75.0078 },
+  { name: "National Emergency (112)",   phone: "tel:112",           location: "Anywhere",        lat: null,    lng: null    },
 ];
 
 // ── Gemini setup ──────────────────────────────────────────────────────────
@@ -56,12 +57,18 @@ const SEVERITY_CONFIG = {
 // ── Hospital Call Modal ───────────────────────────────────────────────────
 const HospitalCallModal = ({ severity, summary, onClose }) => {
   const [calledList, setCalledList] = useState([]);
+  const [selectedHospital, setSelectedHospital] = useState(0);
   const cfg = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.URGENT;
 
   const callHospital = (index) => {
     setCalledList((prev) => [...new Set([...prev, index])]);
     window.location.href = HOSPITALS[index].phone;
   };
+
+  const hospital = HOSPITALS[selectedHospital];
+  const mapUrl = hospital.lat 
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${hospital.lng-0.01}%2C${hospital.lat-0.01}%2C${hospital.lng+0.01}%2C${hospital.lat+0.01}&layer=mapnik&marker=${hospital.lat}%2C${hospital.lng}`
+    : null;
 
   return (
     <div className="hospital-modal-overlay" role="dialog" aria-modal="true">
@@ -73,24 +80,57 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
           <h2>Call Nearest Hospital</h2>
           {summary && <p className="hospital-summary">{summary}</p>}
         </div>
+
+        {/* Embedded Map Section */}
+        {mapUrl && (
+          <div className="hospital-map-container">
+            <iframe
+              title="Hospital Location"
+              width="100%"
+              height="180"
+              frameBorder="0"
+              scrolling="no"
+              marginHeight="0"
+              marginWidth="0"
+              src={mapUrl}
+              style={{ border: 'none', borderRadius: '12px' }}
+            ></iframe>
+            <div className="map-overlay-info">
+              <MapPin size={12} />
+              <span>{hospital.name}</span>
+            </div>
+          </div>
+        )}
+
         <p className="hospital-instruction">
-          Tap a hospital to call. If unavailable, try the next one.
+          Tap a hospital to see on map and call.
         </p>
         <div className="hospital-list">
           {HOSPITALS.map((h, i) => (
-            <div key={i} className={`hospital-item ${calledList.includes(i) ? "called" : ""}`}>
+            <div 
+              key={i} 
+              className={`hospital-item ${calledList.includes(i) ? "called" : ""} ${selectedHospital === i ? "selected" : ""}`}
+              onClick={() => setSelectedHospital(i)}
+              style={{ cursor: 'pointer' }}
+            >
               <div className="hospital-info">
                 <span className="hospital-name">{h.name}</span>
                 <span className="hospital-location">{h.location}</span>
               </div>
-              <button
-                className="hospital-call-btn"
-                onClick={() => callHospital(i)}
-                style={calledList.includes(i) ? { background: "#22c55e" } : {}}
-              >
-                <Phone size={16} />
-                {calledList.includes(i) ? "Called" : "Call"}
-              </button>
+              <div className="hospital-item-actions">
+                {h.lat && <Map size={16} className="map-indicator-icon" />}
+                <button
+                  className="hospital-call-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    callHospital(i);
+                  }}
+                  style={calledList.includes(i) ? { background: "#22c55e" } : {}}
+                >
+                  <Phone size={16} />
+                  {calledList.includes(i) ? "Called" : "Call"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
