@@ -701,25 +701,30 @@ const Ai = () => {
       });
 
       const data = await response.json();
-      if (response.ok && data.transcript) {
-        let detectedLang = language;
-        if (data.language_code) {
-          const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
-          if (matchedLang) {
-            setLanguage(data.language_code);
-            detectedLang = data.language_code;
+      if (response.ok) {
+        const transcript = data.transcript || data.transcript_text;
+        if (transcript) {
+          let detectedLang = language;
+          if (data.language_code) {
+            const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
+            if (matchedLang) {
+              setLanguage(data.language_code);
+              detectedLang = data.language_code;
+            }
           }
-        }
 
-        setInput(data.transcript);
-        // Automatically send the transcribed text
-        handleSend(data.transcript, detectedLang);
+          setInput(transcript);
+          handleSend(transcript, detectedLang);
+        } else {
+          throw new Error("No transcript returned from AI.");
+        }
       } else {
-        throw new Error(data.message || "Failed to transcribe audio");
+        const errMessage = data.message || data.error || JSON.stringify(data);
+        throw new Error(`Sarvam API Error (${response.status}): ${errMessage}`);
       }
     } catch (err) {
       console.error("Saaras API Error:", err);
-      setError("Could not transcribe audio. " + err.message);
+      setError(err.message);
       setIsTyping(false);
     }
   };
@@ -764,7 +769,13 @@ const Ai = () => {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      // Determine best supported mime type
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+        ? 'audio/webm;codecs=opus' 
+        : 'audio/webm';
+        
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -775,7 +786,10 @@ const Ai = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        if (audioChunksRef.current.length === 0) return;
+        
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        // Use .wav extension as a hint for Sarvam, but use actual blob data
         await handleTranscribe(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
