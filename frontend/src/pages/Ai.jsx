@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Send, Mic, User, Bot, Sparkles, AlertCircle, Loader2,
-  Volume2, VolumeX, MicOff, Phone, MapPin, Map,
+  Volume2, VolumeX, MicOff, Phone, MapPin, Map, Square
 } from "lucide-react";
 import { Geolocation } from "@capacitor/geolocation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -653,39 +653,46 @@ const Ai = () => {
     }
 
     const formData = new FormData();
-    formData.append("file", audioBlob, "audio.wav");
+    // Strip codecs from mime type for Sarvam AI compatibility
+    const mimeType = audioBlob.type.split(';')[0];
+    const extension = mimeType.includes('webm') ? 'webm' : 'wav';
+    
+    const cleanBlob = new Blob([audioBlob], { type: mimeType });
+    formData.append("file", cleanBlob, `audio.${extension}`);
     formData.append("model", "saaras:v3");
-    formData.append("language_code", "unknown"); // Auto-detect language
+    formData.append("language_code", "unknown");
 
     try {
       const response = await fetch("https://api.sarvam.ai/speech-to-text", {
         method: "POST",
-        headers: {
-          "api-subscription-key": apiKey
-        },
+        headers: { "api-subscription-key": apiKey },
         body: formData
       });
 
       const data = await response.json();
-      if (response.ok && data.transcript) {
-        let detectedLang = language;
-        if (data.language_code) {
-          const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
-          if (matchedLang) {
-            setLanguage(data.language_code);
-            detectedLang = data.language_code;
+      if (response.ok) {
+        const transcript = data.transcript || data.transcript_text;
+        if (transcript) {
+          let detectedLang = language;
+          if (data.language_code) {
+            const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
+            if (matchedLang) {
+              setLanguage(data.language_code);
+              detectedLang = data.language_code;
+            }
           }
+          setInput(transcript);
+          handleSend(transcript, detectedLang);
+        } else {
+          throw new Error("No transcript returned.");
         }
-        
-        setInput(data.transcript);
-        // Automatically send the transcribed text
-        handleSend(data.transcript, detectedLang);
       } else {
-        throw new Error(data.message || "Failed to transcribe audio");
+        const detail = data.detail || data.message || JSON.stringify(data);
+        throw new Error(`Sarvam Error (${response.status}): ${detail}`);
       }
     } catch (err) {
       console.error("Saaras API Error:", err);
-      setError("Could not transcribe audio. " + err.message);
+      setError(err.message);
       setIsTyping(false);
     }
   };
@@ -701,30 +708,37 @@ const Ai = () => {
     }
 
     try {
-      // For APK: Explicitly request native microphone permissions
+      if (!window.isSecureContext && !Capacitor.isNativePlatform()) {
+        setError("Microphone requires HTTPS or localhost. Use the APK on mobile.");
+        return;
+      }
+
       if (Capacitor.isNativePlatform()) {
-        const { speechRecognition } = await CapacitorSpeech.requestPermissions();
-        if (speechRecognition !== "granted") {
-          setError("Microphone permission denied.");
-          return;
-        }
+        try {
+          const perm = await CapacitorSpeech.checkPermissions();
+          if (perm.speechRecognition !== "granted") {
+            const req = await CapacitorSpeech.requestPermissions();
+            if (req.speechRecognition !== "granted") {
+              setError("Permission denied.");
+              return;
+            }
+          }
+        } catch (e) { console.warn("Native perm check failed", e); }
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        await handleTranscribe(audioBlob);
-        stream.getTracks().forEach(track => track.stop());
+        if (audioChunksRef.current.length === 0) return;
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        if (audioBlob.size > 500) await handleTranscribe(audioBlob);
+        stream.getTracks().forEach(t => t.stop());
       };
 
       mediaRecorder.start();
@@ -732,7 +746,7 @@ const Ai = () => {
       setIsListening(true);
       setError(null);
     } catch (err) {
-      console.error("Microphone access denied:", err);
+      console.error("Mic error:", err);
       setIsListening(false);
       setError("Microphone access denied or not available.");
     }
@@ -846,11 +860,11 @@ const Ai = () => {
       <div className="chat-input-wrapper">
         <div className="chat-input-container">
           <button
-            className={`chat-action-btn chat-mic-btn ${isListening ? "active" : ""}`}
+            className={`chat-action-btn chat-mic-btn ${isListening ? "listening pulsing" : ""}`}
             onClick={toggleMic}
-            title={isListening ? "Stop listening" : "Voice input"}
+            title={isListening ? "Stop and Transcribe" : "Start Voice Input"}
           >
-            {isListening ? <Mic size={22} /> : <MicOff size={22} />}
+            {isListening ? <Square size={22} fill="var(--primary)" /> : <Mic size={22} />}
           </button>
 
           <input
