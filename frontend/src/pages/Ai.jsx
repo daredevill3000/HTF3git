@@ -449,10 +449,10 @@ const Ai = () => {
   // Keep a persistent Gemini chat session so it remembers conversation history
   const chatRef = useRef(null);
 
-  // Init Gemini chat session once
+  // Chat session is now initialized dynamically in handleSend to support API key changes
   useEffect(() => {
-    chatRef.current = model.startChat({ history: [] });
-  }, []);
+    chatRef.current = null;
+  }, [apiKey]);
 
   // Update recognition language
   useEffect(() => {
