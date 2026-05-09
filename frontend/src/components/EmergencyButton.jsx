@@ -29,6 +29,7 @@ const EmergencyButton = () => {
   const [locationReady, setLocationReady]   = useState(false);
   const locationRef                         = useRef({ label: "Locating...", coords: null });
   const { user } = useAuth();
+  const [queueProcessing, setQueueProcessing] = useState(false);
 
   // Reverse geocode coords → human-readable address
   const reverseGeocode = async (lat, lon) => {
@@ -106,9 +107,57 @@ const EmergencyButton = () => {
     getLocation();
   }, []);
 
+  // ── Offline Queue Management ──────────────────────────────────────────
+  const getQueue = () => {
+    try {
+      return JSON.parse(localStorage.getItem("sahayaka_sos_queue") || "[]");
+    } catch (e) { return []; }
+  };
+
+  const addToQueue = (alertData) => {
+    const queue = getQueue();
+    queue.push({ ...alertData, id: Date.now(), timestamp: new Date().toISOString() });
+    localStorage.setItem("sahayaka_sos_queue", JSON.stringify(queue));
+    console.log("📥 SOS added to offline queue");
+  };
+
+  const processQueue = async () => {
+    const queue = getQueue();
+    if (queue.length === 0 || queueProcessing) return;
+
+    console.log(`📡 Processing SOS queue (${queue.length} items)...`);
+    setQueueProcessing(true);
+
+    const remaining = [];
+    for (const item of queue) {
+      try {
+        const success = await sendSOSSms(item.location, true); // true = silent/background mode
+        if (!success) remaining.push(item);
+      } catch (e) {
+        remaining.push(item);
+      }
+    }
+
+    localStorage.setItem("sahayaka_sos_queue", JSON.stringify(remaining));
+    setQueueProcessing(false);
+    if (remaining.length === 0) console.log("✅ SOS queue cleared");
+  };
+
+  // Listen for internet connection recovery
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log("🌐 Internet back online. Checking SOS queue...");
+      processQueue();
+    };
+    window.addEventListener("online", handleOnline);
+    // Also check on mount
+    processQueue();
+    return () => window.removeEventListener("online", handleOnline);
+  }, []);
+
   // ── Send SMS directly via Twilio REST API ────────────────────────────
-  const sendSOSSms = async (currentLocation) => {
-    setSmsStatus("sending");
+  const sendSOSSms = async (currentLocation, isBackground = false) => {
+    if (!isBackground) setSmsStatus("sending");
 
     const accountSid = import.meta.env.VITE_TWILIO_ACCOUNT_SID;
     const authToken  = import.meta.env.VITE_TWILIO_AUTH_TOKEN;
@@ -117,8 +166,8 @@ const EmergencyButton = () => {
 
     if (!accountSid || !authToken || !fromNumber || contacts.length === 0) {
       console.error("❌ Twilio env vars missing");
-      setSmsStatus("failed");
-      return;
+      if (!isBackground) setSmsStatus("failed");
+      return false;
     }
 
     // Keep under 160 chars for Twilio trial account limit
@@ -167,25 +216,39 @@ const EmergencyButton = () => {
     }
 
     if (!anySuccess) {
-      console.warn("🌐 Twilio SMS failed, falling back to Native SMS (Internal Messenger)...");
-      setSmsStatus("fallback");
-      
-      try {
-        await SmsManager.send({
-          numbers: contacts.map(c => c.startsWith("+") ? c : `+${c}`),
-          text: body,
-          android: {
-            intent: "com.android.mms.intent.action.SENDTO" // Explicitly target messenger
-          }
-        });
-        console.log("📲 Native SMS triggered successfully");
-        anySuccess = true;
-      } catch (err) {
-        console.error("❌ Native SMS fallback failed:", err.message);
+      if (!isBackground) {
+        console.warn("🌐 Twilio SMS failed, falling back to Native SMS (Internal Messenger)...");
+        setSmsStatus("fallback");
+        
+        try {
+          await SmsManager.send({
+            numbers: contacts.map(c => c.startsWith("+") ? c : `+${c}`),
+            text: body,
+            android: {
+              intent: "com.android.mms.intent.action.SENDTO"
+            }
+          });
+          console.log("📲 Native SMS triggered successfully");
+          anySuccess = true;
+        } catch (err) {
+          console.error("❌ Native SMS fallback failed:", err.message);
+        }
+      } else {
+        // If background (queue processing), we only care about internet-based Twilio success.
+        // We don't trigger native SMS in background as it requires user interaction.
+        console.warn("🌐 Background SOS sync failed (still offline?)");
+        return false; 
       }
     }
 
-    setSmsStatus(anySuccess ? "sent" : "failed");
+    if (!isBackground) setSmsStatus(anySuccess ? "sent" : "failed");
+    
+    // If foreground send failed completely (no internet AND native failed), queue it for later
+    if (!anySuccess && !isBackground) {
+      addToQueue({ location: currentLocation });
+    }
+
+    return anySuccess;
   };
 
   // ── Listen for trigger-sos event from Dashboard SOS button ───────────
