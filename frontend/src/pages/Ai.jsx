@@ -11,10 +11,10 @@ import { Capacitor } from "@capacitor/core";
 // ── Hospital database (nearest first) ────────────────────────────────────
 const HOSPITALS = [
   { name: "Gokak Government Hospital", phone: "tel:+918352220300", location: "Gokak, Belagavi", lat: 16.1667, lng: 74.8333 },
-  { name: "KLE Hospital Belagavi",      phone: "tel:+918312470000", location: "Belagavi",        lat: 15.8677, lng: 74.5089 },
-  { name: "KIMS Hospital Hubli",        phone: "tel:+918362370000", location: "Hubli",           lat: 15.3647, lng: 75.1240 },
-  { name: "District Hospital Dharwad",  phone: "tel:+918362447700", location: "Dharwad",         lat: 15.4589, lng: 75.0078 },
-  { name: "National Emergency (112)",   phone: "tel:112",           location: "Anywhere",        lat: null,    lng: null    },
+  { name: "KLE Hospital Belagavi", phone: "tel:+918312470000", location: "Belagavi", lat: 15.8677, lng: 74.5089 },
+  { name: "KIMS Hospital Hubli", phone: "tel:+918362370000", location: "Hubli", lat: 15.3647, lng: 75.1240 },
+  { name: "District Hospital Dharwad", phone: "tel:+918362447700", location: "Dharwad", lat: 15.4589, lng: 75.0078 },
+  { name: "National Emergency (112)", phone: "tel:112", location: "Anywhere", lat: null, lng: null },
 ];
 
 // ── Gemini setup (Dynamic) ───────────────────────────────────────────────
@@ -35,10 +35,10 @@ Severity levels:
 Set callHospital=true only for CRITICAL or URGENT.
 Keep advice concise, calm, step-by-step. End with: "Call 112 for real emergencies."`;
 
-const getGenerativeModel = (apiKey) => {
-  const genAI = new GoogleGenerativeAI(apiKey || import.meta.env.VITE_GEMINI_API_KEY);
+const getGenerativeModel = () => {
+  const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
   return genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
+    model: "gemini-2.5-flash",
     systemInstruction: SYSTEM_PROMPT,
   });
 };
@@ -300,10 +300,10 @@ Heat stroke can become fatal quickly.
 ];
 
 const SEVERITY_CONFIG = {
-  CRITICAL: { color: "#ef4444", bg: "rgba(239,68,68,0.1)",  label: "CRITICAL", icon: "🚨" },
-  URGENT:   { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "URGENT",   icon: "⚠️" },
+  CRITICAL: { color: "#ef4444", bg: "rgba(239,68,68,0.1)", label: "CRITICAL", icon: "🚨" },
+  URGENT: { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "URGENT", icon: "⚠️" },
   MODERATE: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)", label: "MODERATE", icon: "ℹ️" },
-  LOW:      { color: "#22c55e", bg: "rgba(34,197,94,0.1)",  label: "LOW",      icon: "✅" },
+  LOW: { color: "#22c55e", bg: "rgba(34,197,94,0.1)", label: "LOW", icon: "✅" },
 };
 
 // ── Hospital Call Modal ───────────────────────────────────────────────────
@@ -318,8 +318,8 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
   };
 
   const hospital = HOSPITALS[selectedHospital];
-  const mapUrl = hospital.lat 
-    ? `https://www.openstreetmap.org/export/embed.html?bbox=${hospital.lng-0.01}%2C${hospital.lat-0.01}%2C${hospital.lng+0.01}%2C${hospital.lat+0.01}&layer=mapnik&marker=${hospital.lat}%2C${hospital.lng}`
+  const mapUrl = hospital.lat
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${hospital.lng - 0.01}%2C${hospital.lat - 0.01}%2C${hospital.lng + 0.01}%2C${hospital.lat + 0.01}&layer=mapnik&marker=${hospital.lat}%2C${hospital.lng}`
     : null;
 
   return (
@@ -359,8 +359,8 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
         </p>
         <div className="hospital-list">
           {HOSPITALS.map((h, i) => (
-            <div 
-              key={i} 
+            <div
+              key={i}
               className={`hospital-item ${calledList.includes(i) ? "called" : ""} ${selectedHospital === i ? "selected" : ""}`}
               onClick={() => setSelectedHospital(i)}
               style={{ cursor: 'pointer' }}
@@ -435,8 +435,6 @@ const Ai = () => {
   const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isSoundOn, setIsSoundOn] = useState(true);
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
-  const [apiKey, setApiKey] = useState(localStorage.getItem("sahayaka_gemini_api_key") || "");
   const [currentSeverity, setCurrentSeverity] = useState(null);
   const [currentSummary, setCurrentSummary] = useState("");
   const [showHospitalModal, setShowHospitalModal] = useState(false);
@@ -449,10 +447,10 @@ const Ai = () => {
   // Keep a persistent Gemini chat session so it remembers conversation history
   const chatRef = useRef(null);
 
-  // Chat session is now initialized dynamically in handleSend to support API key changes
+  // Init Gemini chat session once
   useEffect(() => {
-    chatRef.current = null;
-  }, [apiKey]);
+    chatRef.current = getGenerativeModel().startChat({ history: [] });
+  }, []);
 
   // Update recognition language
   useEffect(() => {
@@ -475,56 +473,56 @@ const Ai = () => {
     }
 
     const targetLangCode = langCode || language || "en-IN";
-    
+
     // Stop any playing audio
     if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
 
     try {
       const requestBody = {
-          inputs: [text.substring(0, 1000)], // Enforce length limits if any
-          speaker: "priya",
-          target_language_code: targetLangCode,
-          model: "bulbul:v3"
+        inputs: [text.substring(0, 1000)], // Enforce length limits if any
+        speaker: "priya",
+        target_language_code: targetLangCode,
+        model: "bulbul:v3"
       };
 
       const response = await fetch("https://api.sarvam.ai/text-to-speech", {
-          method: "POST",
-          headers: {
-              "api-subscription-key": apiKey,
-              "Content-Type": "application/json"
-          },
-          body: JSON.stringify(requestBody)
+        method: "POST",
+        headers: {
+          "api-subscription-key": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`TTS API failed: ${errText}`);
+        const errText = await response.text();
+        throw new Error(`TTS API failed: ${errText}`);
       }
 
       const data = await response.json();
       const audioBase64 = data.audio_content || data.audios?.[0];
 
       if (audioBase64) {
-          const audioSrc = `data:audio/wav;base64,${audioBase64}`;
-          if (!audioRef.current) {
-              audioRef.current = new Audio(audioSrc);
-          } else {
-              audioRef.current.src = audioSrc;
-          }
-          await audioRef.current.play();
+        const audioSrc = `data:audio/wav;base64,${audioBase64}`;
+        if (!audioRef.current) {
+          audioRef.current = new Audio(audioSrc);
+        } else {
+          audioRef.current.src = audioSrc;
+        }
+        await audioRef.current.play();
       }
-    } catch (e) { 
-      console.error("Sarvam TTS error", e); 
+    } catch (e) {
+      console.error("Sarvam TTS error", e);
       // Fallback to basic window speech synth if Bulbul fails
       try {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = targetLangCode;
         window.speechSynthesis.speak(utterance);
-      } catch (err) {}
+      } catch (err) { }
     }
   };
 
@@ -572,7 +570,7 @@ const Ai = () => {
     if (!navigator.onLine) {
       console.log("App is offline, checking local knowledge...");
       const lowerInput = textToSend.toLowerCase();
-      const match = OFFLINE_EMERGENCY_DATA.find(item => 
+      const match = OFFLINE_EMERGENCY_DATA.find(item =>
         item.keywords.some(kw => lowerInput.includes(kw.toLowerCase()))
       );
 
@@ -611,8 +609,13 @@ const Ai = () => {
       const prompt = `User says: ${textToSend}`;
 
       // Live AI Logic
-      const currentModel = getGenerativeModel(apiKey);
+      const currentModel = getGenerativeModel();
       
+      // If chat session is lost, re-init
+      if (!chatRef.current) {
+        chatRef.current = currentModel.startChat({ history: [] });
+      }
+
       // Gemini history MUST start with a 'user' message. 
       // Filter out system/welcome messages and find the first user message.
       const rawHistory = messages
@@ -622,16 +625,7 @@ const Ai = () => {
           parts: [{ text: m.content }],
         }));
 
-      let finalHistory = rawHistory.slice(-6);
-      if (finalHistory.length > 0 && finalHistory[0].role !== "user") {
-        finalHistory.shift();
-      }
-
-      const chatSession = currentModel.startChat({ 
-        history: finalHistory
-      });
-
-      const result = await chatSession.sendMessage(textToSend);
+      const result = await chatRef.current.sendMessage(textToSend);
       const rawText = result.response.text();
 
       const parsed = parseAIResponse(rawText);
@@ -716,7 +710,7 @@ const Ai = () => {
             detectedLang = data.language_code;
           }
         }
-        
+
         setInput(data.transcript);
         // Automatically send the transcribed text
         handleSend(data.transcript, detectedLang);
@@ -790,48 +784,10 @@ const Ai = () => {
             <h2 className="ai-header-title">Medical Triage AI</h2>
             <div className="ai-status-row">
               <div className="status-dot connected"></div>
-              <span className="status-label">Gemini 1.5 Flash</span>
-              <button 
-                className="api-key-toggle-btn" 
-                onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                title="Configure API Key"
-              >
-                {apiKey ? "✅ API Key Set" : "🔑 Set API Key"}
-              </button>
+              <span className="status-label">Gemini 2.5 Flash</span>
             </div>
           </div>
         </div>
-
-        {showApiKeyInput && (
-          <div className="api-key-config-overlay">
-            <div className="api-key-config-card">
-              <h3>Configure Gemini API Key</h3>
-              <p>Your key is stored locally on this device.</p>
-              <input 
-                type="password" 
-                placeholder="Enter your Gemini API Key..." 
-                value={apiKey}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setApiKey(val);
-                  localStorage.setItem("sahayaka_gemini_api_key", val);
-                }}
-              />
-              <div className="api-key-actions">
-                <button onClick={() => setShowApiKeyInput(false)}>Close</button>
-                <button 
-                  className="clear-key-btn" 
-                  onClick={() => {
-                    setApiKey("");
-                    localStorage.removeItem("sahayaka_gemini_api_key");
-                  }}
-                >
-                  Clear Key
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="ai-header-right">
           <select
