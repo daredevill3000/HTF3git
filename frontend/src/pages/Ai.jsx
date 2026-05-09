@@ -6,8 +6,6 @@ import {
 import { Geolocation } from "@capacitor/geolocation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from "react-markdown";
-import { SpeechRecognition as CapacitorSpeech } from "@capacitor-community/speech-recognition";
-
 // ── Hospital database (nearest first) ────────────────────────────────────
 const HOSPITALS = [
   { name: "Gokak Government Hospital", phone: "tel:+918352220300", location: "Gokak, Belagavi", lat: 16.1667, lng: 74.8333 },
@@ -25,7 +23,10 @@ const model = genAI.getGenerativeModel({
   systemInstruction: `You are Sahayaka AI, an emergency medical triage assistant for rural India.
 
 When a user describes symptoms or an emergency, respond with a JSON object in this EXACT format (no markdown fences, no extra text, just raw JSON):
-{"severity":"CRITICAL","advice":"your advice here","callHospital":true,"summary":"one line summary"}
+{"severity":"CRITICAL","advice":"your advice here","callHospital":true,"summary":"one line summary","languageCode":"en-IN"}
+
+"languageCode" MUST be the BCP-47 language code of your response (e.g. "en-IN", "hi-IN", "ta-IN").
+Respond in the exact same language that the user used in their input!
 
 Severity levels:
 - CRITICAL: Life-threatening (cardiac arrest, severe bleeding, unconscious, stroke, severe burns, drowning, snake bite with symptoms)
@@ -189,8 +190,9 @@ const Ai = () => {
   const [error, setError] = useState(null);
 
   const scrollRef = useRef(null);
-  const recognitionRef = useRef(null);
-  const isNative = useRef(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const audioRef = useRef(null);
   // Keep a persistent Gemini chat session so it remembers conversation history
   const chatRef = useRef(null);
 
@@ -199,33 +201,8 @@ const Ai = () => {
     chatRef.current = model.startChat({ history: [] });
   }, []);
 
-  // Detect Capacitor native speech
-  useEffect(() => {
-    CapacitorSpeech.available()
-      .then(({ available }) => { isNative.current = available; })
-      .catch(() => { isNative.current = false; });
-  }, []);
-
-  // Web Speech Recognition fallback
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SR) {
-      recognitionRef.current = new SR();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = language;
-      recognitionRef.current.onresult = (e) => {
-        setInput(e.results[0][0].transcript);
-        setIsListening(false);
-      };
-      recognitionRef.current.onerror = () => setIsListening(false);
-      recognitionRef.current.onend = () => setIsListening(false);
-    }
-  }, []);
-
   // Update recognition language
   useEffect(() => {
-    if (recognitionRef.current) recognitionRef.current.lang = language;
     localStorage.setItem("sahayaka_lang", language);
   }, [language]);
 
@@ -236,20 +213,66 @@ const Ai = () => {
     }
   }, [messages, isTyping]);
 
-  const speak = (text) => {
+  const speakWithBulbul = async (text, langCode) => {
     if (!isSoundOn) return;
+    const apiKey = import.meta.env.VITE_SARVAM_API_KEY;
+    if (!apiKey) {
+      console.warn("No Sarvam API Key found.");
+      return;
+    }
+
+    const targetLangCode = langCode || language || "en-IN";
+    
+    // Stop any playing audio
+    if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+    }
+
     try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      const voices = window.speechSynthesis.getVoices();
-      const preferred =
-        voices.find((v) => v.lang?.toLowerCase().startsWith(language.split("-")[0])) ||
-        voices.find((v) => v.name?.includes("Google") && v.lang?.includes("en")) ||
-        voices[0];
-      if (preferred) utterance.voice = preferred;
-      utterance.rate = 1.0;
-      window.speechSynthesis.speak(utterance);
-    } catch (e) { console.error("Synthesis error", e); }
+      const requestBody = {
+          inputs: [text.substring(0, 1000)], // Enforce length limits if any
+          speaker: "priya",
+          target_language_code: targetLangCode,
+          model: "bulbul:v3"
+      };
+
+      const response = await fetch("https://api.sarvam.ai/text-to-speech", {
+          method: "POST",
+          headers: {
+              "api-subscription-key": apiKey,
+              "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`TTS API failed: ${errText}`);
+      }
+
+      const data = await response.json();
+      const audioBase64 = data.audio_content || data.audios?.[0];
+
+      if (audioBase64) {
+          const audioSrc = `data:audio/wav;base64,${audioBase64}`;
+          if (!audioRef.current) {
+              audioRef.current = new Audio(audioSrc);
+          } else {
+              audioRef.current.src = audioSrc;
+          }
+          await audioRef.current.play();
+      }
+    } catch (e) { 
+      console.error("Sarvam TTS error", e); 
+      // Fallback to basic window speech synth if Bulbul fails
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = targetLangCode;
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {}
+    }
   };
 
   // ── Parse AI response ─────────────────────────────────────────────────
@@ -269,26 +292,31 @@ const Ai = () => {
     } catch (_) {
       // fall through
     }
-    return { severity: null, advice: raw, callHospital: false, summary: "" };
+    return { severity: null, advice: raw, callHospital: false, summary: "", languageCode: null };
   };
 
   // ── Send message ──────────────────────────────────────────────────────
-  const handleSend = async () => {
-    const trimmed = input.trim();
-    if (!trimmed || isTyping) return;
+  const handleSend = async (overrideInput = null, detectedLanguage = null) => {
+    const textToSend = typeof overrideInput === "string" ? overrideInput.trim() : input.trim();
+    if (!textToSend || isTyping) return;
 
-    const userMsg = { id: Date.now(), role: "user", content: trimmed, severity: null };
+    const userMsg = { id: Date.now(), role: "user", content: textToSend, severity: null };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsTyping(true);
     setError(null);
     try {
       window.speechSynthesis.cancel();
-    } catch (e) { console.error("Speech sync error", e); }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    } catch (e) { console.error("Audio sync error", e); }
+
+    let activeLanguage = detectedLanguage || language;
 
     try {
-      const langLabel = LANGUAGES.find((l) => l.code === language)?.label || "English";
-      const prompt = `Respond in ${langLabel}. User says: ${trimmed}`;
+      const prompt = `User says: ${textToSend}`;
 
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("AI request timed out. Please check your internet connection or try again.")), 15000)
@@ -301,7 +329,13 @@ const Ai = () => {
       const rawText = result.response.text();
 
       const parsed = parseAIResponse(rawText);
-      const { severity, advice, callHospital, summary } = parsed;
+      const { severity, advice, callHospital, summary, languageCode } = parsed;
+
+      if (languageCode) {
+        activeLanguage = languageCode;
+        const matchedLang = LANGUAGES.find(l => l.code === languageCode);
+        if (matchedLang) setLanguage(languageCode);
+      }
 
       if (severity) {
         setCurrentSeverity(severity);
@@ -320,7 +354,7 @@ const Ai = () => {
       };
       setMessages((prev) => [...prev, botMsg]);
       try {
-        speak(advice);
+        await speakWithBulbul(advice, activeLanguage);
       } catch (e) { console.error("Speak error", e); }
     } catch (err) {
       console.error("Gemini Error:", err);
@@ -343,35 +377,89 @@ const Ai = () => {
     }
   };
 
+  const handleTranscribe = async (audioBlob) => {
+    setIsTyping(true);
+    const apiKey = import.meta.env.VITE_SARVAM_API_KEY;
+    if (!apiKey) {
+      setError("Sarvam API key not found");
+      setIsTyping(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", audioBlob, "audio.wav");
+    formData.append("model", "saaras:v3");
+    formData.append("language_code", "unknown"); // Auto-detect language
+
+    try {
+      const response = await fetch("https://api.sarvam.ai/speech-to-text", {
+        method: "POST",
+        headers: {
+          "api-subscription-key": apiKey
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      if (response.ok && data.transcript) {
+        let detectedLang = language;
+        if (data.language_code) {
+          const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
+          if (matchedLang) {
+            setLanguage(data.language_code);
+            detectedLang = data.language_code;
+          }
+        }
+        
+        setInput(data.transcript);
+        // Automatically send the transcribed text
+        handleSend(data.transcript, detectedLang);
+      } else {
+        throw new Error(data.message || "Failed to transcribe audio");
+      }
+    } catch (err) {
+      console.error("Saaras API Error:", err);
+      setError("Could not transcribe audio. " + err.message);
+      setIsTyping(false);
+    }
+  };
+
   // ── Mic toggle ────────────────────────────────────────────────────────
   const toggleMic = async () => {
     if (isListening) {
-      if (isNative.current) await CapacitorSpeech.stop();
-      else recognitionRef.current?.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
       setIsListening(false);
       return;
     }
-    setInput("");
-    setIsListening(true);
-    if (isNative.current) {
-      const { speechRecognition } = await CapacitorSpeech.requestPermissions();
-      if (speechRecognition !== "granted") { setIsListening(false); return; }
-      try {
-        const result = await CapacitorSpeech.start({
-          language,
-          maxResults: 1,
-          prompt: "Describe your emergency or symptoms",
-          partialResults: false,
-          popup: false,
-        });
-        if (result?.matches?.length > 0) setInput(result.matches[0]);
-      } catch (err) {
-        console.error("Capacitor Speech Error:", err);
-      } finally {
-        setIsListening(false);
-      }
-    } else {
-      recognitionRef.current?.start();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        await handleTranscribe(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setInput("");
+      setIsListening(true);
+      setError(null);
+    } catch (err) {
+      console.error("Microphone access denied:", err);
+      setIsListening(false);
+      setError("Microphone access denied or not available.");
     }
   };
 
