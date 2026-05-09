@@ -17,9 +17,31 @@ const HOSPITALS = [
   { name: "National Emergency (112)",   phone: "tel:112",           location: "Anywhere",        lat: null,    lng: null    },
 ];
 
-// ── Backend Proxy Setup ───────────────────────────────────────────────────
-const API_URL = import.meta.env.VITE_API_URL || "http://192.168.1.7:5000"; 
-// Note: Use your machine's local IP for mobile testing
+// ── Gemini setup (Dynamic) ───────────────────────────────────────────────
+const SYSTEM_PROMPT = `You are Sahayaka AI, an emergency medical triage assistant for rural India.
+
+When a user describes symptoms or an emergency, respond with a JSON object in this EXACT format (no markdown fences, no extra text, just raw JSON):
+{"severity":"CRITICAL","advice":"your advice here","callHospital":true,"summary":"one line summary","languageCode":"en-IN"}
+
+"languageCode" MUST be the BCP-47 language code of your response (e.g. "en-IN", "hi-IN", "ta-IN").
+Respond in the exact same language that the user used in their input!
+
+Severity levels:
+- CRITICAL: Life-threatening (cardiac arrest, severe bleeding, unconscious, stroke, severe burns, drowning, snake bite with symptoms)
+- URGENT: Needs hospital within 1-2 hours (fractures, high fever >104F, severe pain, difficulty breathing)
+- MODERATE: Needs medical attention today (moderate fever, wounds, vomiting, mild breathing issues)
+- LOW: Can be managed at home (minor cuts, mild fever, headache, cold)
+
+Set callHospital=true only for CRITICAL or URGENT.
+Keep advice concise, calm, step-by-step. End with: "Call 112 for real emergencies."`;
+
+const getGenerativeModel = (apiKey) => {
+  const genAI = new GoogleGenerativeAI(apiKey || import.meta.env.VITE_GEMINI_API_KEY);
+  return genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    systemInstruction: SYSTEM_PROMPT,
+  });
+};
 
 const LANGUAGES = [
   { code: "en-IN", label: "English" },
@@ -413,6 +435,8 @@ const Ai = () => {
   const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isSoundOn, setIsSoundOn] = useState(true);
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [apiKey, setApiKey] = useState(localStorage.getItem("sahayaka_gemini_api_key") || "");
   const [currentSeverity, setCurrentSeverity] = useState(null);
   const [currentSummary, setCurrentSummary] = useState("");
   const [showHospitalModal, setShowHospitalModal] = useState(false);
@@ -422,7 +446,13 @@ const Ai = () => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioRef = useRef(null);
+  // Keep a persistent Gemini chat session so it remembers conversation history
   const chatRef = useRef(null);
+
+  // Init Gemini chat session once
+  useEffect(() => {
+    chatRef.current = model.startChat({ history: [] });
+  }, []);
 
   // Update recognition language
   useEffect(() => {
@@ -580,19 +610,20 @@ const Ai = () => {
     try {
       const prompt = `User says: ${textToSend}`;
 
-      const res = await fetch(`${API_URL}/api/triage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+      // Live AI Logic
+      const currentModel = getGenerativeModel(apiKey);
+      const chatSession = currentModel.startChat({
+        history: messages
+          .slice(-6) // Only send last 3 exchanges to save tokens
+          .filter(m => m.role !== "system" && m.content)
+          .map(m => ({
+            role: m.role === "user" ? "user" : "model",
+            parts: [{ text: m.content }],
+          }))
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to fetch AI response");
-      }
-
-      const data = await res.json();
-      const rawText = data.text;
+      const result = await chatSession.sendMessage(textToSend);
+      const rawText = result.response.text();
 
       const parsed = parseAIResponse(rawText);
       const { severity, advice, callHospital, summary, languageCode } = parsed;
@@ -750,10 +781,48 @@ const Ai = () => {
             <h2 className="ai-header-title">Medical Triage AI</h2>
             <div className="ai-status-row">
               <div className="status-dot connected"></div>
-              <span className="status-label">Gemini 2.5 Flash</span>
+              <span className="status-label">Gemini 1.5 Flash</span>
+              <button 
+                className="api-key-toggle-btn" 
+                onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                title="Configure API Key"
+              >
+                {apiKey ? "✅ API Key Set" : "🔑 Set API Key"}
+              </button>
             </div>
           </div>
         </div>
+
+        {showApiKeyInput && (
+          <div className="api-key-config-overlay">
+            <div className="api-key-config-card">
+              <h3>Configure Gemini API Key</h3>
+              <p>Your key is stored locally on this device.</p>
+              <input 
+                type="password" 
+                placeholder="Enter your Gemini API Key..." 
+                value={apiKey}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setApiKey(val);
+                  localStorage.setItem("sahayaka_gemini_api_key", val);
+                }}
+              />
+              <div className="api-key-actions">
+                <button onClick={() => setShowApiKeyInput(false)}>Close</button>
+                <button 
+                  className="clear-key-btn" 
+                  onClick={() => {
+                    setApiKey("");
+                    localStorage.removeItem("sahayaka_gemini_api_key");
+                  }}
+                >
+                  Clear Key
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="ai-header-right">
           <select
