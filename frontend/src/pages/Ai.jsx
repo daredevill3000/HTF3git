@@ -1,24 +1,27 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Send, Mic, User, Bot, Sparkles, AlertCircle, Loader2,
-  Volume2, VolumeX, MicOff, Phone, MapPin, Map, Square
+  Volume2, VolumeX, MicOff, Phone, MapPin, Map,
 } from "lucide-react";
 import { Geolocation } from "@capacitor/geolocation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from "react-markdown";
 import { SpeechRecognition as CapacitorSpeech } from "@capacitor-community/speech-recognition";
-import { Capacitor } from "@capacitor/core";
 // ── Hospital database (nearest first) ────────────────────────────────────
 const HOSPITALS = [
   { name: "Gokak Government Hospital", phone: "tel:+918352220300", location: "Gokak, Belagavi", lat: 16.1667, lng: 74.8333 },
-  { name: "KLE Hospital Belagavi", phone: "tel:+918312470000", location: "Belagavi", lat: 15.8677, lng: 74.5089 },
-  { name: "KIMS Hospital Hubli", phone: "tel:+918362370000", location: "Hubli", lat: 15.3647, lng: 75.1240 },
-  { name: "District Hospital Dharwad", phone: "tel:+918362447700", location: "Dharwad", lat: 15.4589, lng: 75.0078 },
-  { name: "National Emergency (112)", phone: "tel:112", location: "Anywhere", lat: null, lng: null },
+  { name: "KLE Hospital Belagavi",      phone: "tel:+918312470000", location: "Belagavi",        lat: 15.8677, lng: 74.5089 },
+  { name: "KIMS Hospital Hubli",        phone: "tel:+918362370000", location: "Hubli",           lat: 15.3647, lng: 75.1240 },
+  { name: "District Hospital Dharwad",  phone: "tel:+918362447700", location: "Dharwad",         lat: 15.4589, lng: 75.0078 },
+  { name: "National Emergency (112)",   phone: "tel:112",           location: "Anywhere",        lat: null,    lng: null    },
 ];
 
-// ── Gemini setup (Dynamic) ───────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are Sahayaka AI, an emergency medical triage assistant for rural India.
+// ── Gemini setup ──────────────────────────────────────────────────────────
+const GEN_AI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(GEN_AI_KEY);
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash",
+  systemInstruction: `You are Sahayaka AI, an emergency medical triage assistant for rural India.
 
 When a user describes symptoms or an emergency, respond with a JSON object in this EXACT format (no markdown fences, no extra text, just raw JSON):
 {"severity":"CRITICAL","advice":"your advice here","callHospital":true,"summary":"one line summary","languageCode":"en-IN"}
@@ -33,15 +36,8 @@ Severity levels:
 - LOW: Can be managed at home (minor cuts, mild fever, headache, cold)
 
 Set callHospital=true only for CRITICAL or URGENT.
-Keep advice concise, calm, step-by-step. End with: "Call 112 for real emergencies."`;
-
-const getGenerativeModel = () => {
-  const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-  return genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    systemInstruction: SYSTEM_PROMPT,
-  });
-};
+Keep advice concise, calm, step-by-step. End with: "Call 112 for real emergencies."`,
+});
 
 const LANGUAGES = [
   { code: "en-IN", label: "English" },
@@ -300,10 +296,10 @@ Heat stroke can become fatal quickly.
 ];
 
 const SEVERITY_CONFIG = {
-  CRITICAL: { color: "#ef4444", bg: "rgba(239,68,68,0.1)", label: "CRITICAL", icon: "🚨" },
-  URGENT: { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "URGENT", icon: "⚠️" },
+  CRITICAL: { color: "#ef4444", bg: "rgba(239,68,68,0.1)",  label: "CRITICAL", icon: "🚨" },
+  URGENT:   { color: "#f59e0b", bg: "rgba(245,158,11,0.1)", label: "URGENT",   icon: "⚠️" },
   MODERATE: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)", label: "MODERATE", icon: "ℹ️" },
-  LOW: { color: "#22c55e", bg: "rgba(34,197,94,0.1)", label: "LOW", icon: "✅" },
+  LOW:      { color: "#22c55e", bg: "rgba(34,197,94,0.1)",  label: "LOW",      icon: "✅" },
 };
 
 // ── Hospital Call Modal ───────────────────────────────────────────────────
@@ -318,8 +314,8 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
   };
 
   const hospital = HOSPITALS[selectedHospital];
-  const mapUrl = hospital.lat
-    ? `https://www.openstreetmap.org/export/embed.html?bbox=${hospital.lng - 0.01}%2C${hospital.lat - 0.01}%2C${hospital.lng + 0.01}%2C${hospital.lat + 0.01}&layer=mapnik&marker=${hospital.lat}%2C${hospital.lng}`
+  const mapUrl = hospital.lat 
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${hospital.lng-0.01}%2C${hospital.lat-0.01}%2C${hospital.lng+0.01}%2C${hospital.lat+0.01}&layer=mapnik&marker=${hospital.lat}%2C${hospital.lng}`
     : null;
 
   return (
@@ -359,8 +355,8 @@ const HospitalCallModal = ({ severity, summary, onClose }) => {
         </p>
         <div className="hospital-list">
           {HOSPITALS.map((h, i) => (
-            <div
-              key={i}
+            <div 
+              key={i} 
               className={`hospital-item ${calledList.includes(i) ? "called" : ""} ${selectedHospital === i ? "selected" : ""}`}
               onClick={() => setSelectedHospital(i)}
               style={{ cursor: 'pointer' }}
@@ -449,7 +445,7 @@ const Ai = () => {
 
   // Init Gemini chat session once
   useEffect(() => {
-    chatRef.current = getGenerativeModel().startChat({ history: [] });
+    chatRef.current = model.startChat({ history: [] });
   }, []);
 
   // Update recognition language
@@ -473,56 +469,56 @@ const Ai = () => {
     }
 
     const targetLangCode = langCode || language || "en-IN";
-
+    
     // Stop any playing audio
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
     }
 
     try {
       const requestBody = {
-        inputs: [text.substring(0, 1000)], // Enforce length limits if any
-        speaker: "priya",
-        target_language_code: targetLangCode,
-        model: "bulbul:v3"
+          inputs: [text.substring(0, 1000)], // Enforce length limits if any
+          speaker: "priya",
+          target_language_code: targetLangCode,
+          model: "bulbul:v3"
       };
 
       const response = await fetch("https://api.sarvam.ai/text-to-speech", {
-        method: "POST",
-        headers: {
-          "api-subscription-key": apiKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(requestBody)
+          method: "POST",
+          headers: {
+              "api-subscription-key": apiKey,
+              "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`TTS API failed: ${errText}`);
+          const errText = await response.text();
+          throw new Error(`TTS API failed: ${errText}`);
       }
 
       const data = await response.json();
       const audioBase64 = data.audio_content || data.audios?.[0];
 
       if (audioBase64) {
-        const audioSrc = `data:audio/wav;base64,${audioBase64}`;
-        if (!audioRef.current) {
-          audioRef.current = new Audio(audioSrc);
-        } else {
-          audioRef.current.src = audioSrc;
-        }
-        await audioRef.current.play();
+          const audioSrc = `data:audio/wav;base64,${audioBase64}`;
+          if (!audioRef.current) {
+              audioRef.current = new Audio(audioSrc);
+          } else {
+              audioRef.current.src = audioSrc;
+          }
+          await audioRef.current.play();
       }
-    } catch (e) {
-      console.error("Sarvam TTS error", e);
+    } catch (e) { 
+      console.error("Sarvam TTS error", e); 
       // Fallback to basic window speech synth if Bulbul fails
       try {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = targetLangCode;
         window.speechSynthesis.speak(utterance);
-      } catch (err) { }
+      } catch (err) {}
     }
   };
 
@@ -570,7 +566,7 @@ const Ai = () => {
     if (!navigator.onLine) {
       console.log("App is offline, checking local knowledge...");
       const lowerInput = textToSend.toLowerCase();
-      const match = OFFLINE_EMERGENCY_DATA.find(item =>
+      const match = OFFLINE_EMERGENCY_DATA.find(item => 
         item.keywords.some(kw => lowerInput.includes(kw.toLowerCase()))
       );
 
@@ -608,24 +604,14 @@ const Ai = () => {
     try {
       const prompt = `User says: ${textToSend}`;
 
-      // Live AI Logic
-      const currentModel = getGenerativeModel();
-      
-      // If chat session is lost, re-init
-      if (!chatRef.current) {
-        chatRef.current = currentModel.startChat({ history: [] });
-      }
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("AI request timed out. Please check your internet connection or try again.")), 15000)
+      );
 
-      // Gemini history MUST start with a 'user' message. 
-      // Filter out system/welcome messages and find the first user message.
-      const rawHistory = messages
-        .filter(m => m.content && !m.content.includes("Hello! I'm Sahayaka AI")) // Skip welcome
-        .map(m => ({
-          role: m.role === "user" ? "user" : "model",
-          parts: [{ text: m.content }],
-        }));
-
-      const result = await chatRef.current.sendMessage(textToSend);
+      const result = await Promise.race([
+        chatRef.current.sendMessage(prompt),
+        timeoutPromise
+      ]);
       const rawText = result.response.text();
 
       const parsed = parseAIResponse(rawText);
@@ -687,15 +673,11 @@ const Ai = () => {
     }
 
     const formData = new FormData();
-    // Use the actual mime type to determine extension
-    const extension = audioBlob.type.includes('webm') ? 'webm' : 'wav';
-    formData.append("file", audioBlob, `audio.${extension}`);
+    formData.append("file", audioBlob, "audio.wav");
     formData.append("model", "saaras:v3");
-    formData.append("language_code", "unknown");
+    formData.append("language_code", "unknown"); // Auto-detect language
 
     try {
-      console.log("Sending to Sarvam:", { size: audioBlob.size, type: audioBlob.type, extension });
-      
       const response = await fetch("https://api.sarvam.ai/speech-to-text", {
         method: "POST",
         headers: {
@@ -705,40 +687,25 @@ const Ai = () => {
       });
 
       const data = await response.json();
-      console.log("Sarvam API Response Data:", data);
-
-      if (response.ok) {
-        const transcript = data.transcript || data.transcript_text;
-        if (transcript) {
-          let detectedLang = language;
-          if (data.language_code) {
-            const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
-            if (matchedLang) {
-              setLanguage(data.language_code);
-              detectedLang = data.language_code;
-            }
+      if (response.ok && data.transcript) {
+        let detectedLang = language;
+        if (data.language_code) {
+          const matchedLang = LANGUAGES.find(l => l.code === data.language_code);
+          if (matchedLang) {
+            setLanguage(data.language_code);
+            detectedLang = data.language_code;
           }
-
-          setInput(transcript);
-          handleSend(transcript, detectedLang);
-        } else {
-          throw new Error("No transcript returned from AI.");
         }
+        
+        setInput(data.transcript);
+        // Automatically send the transcribed text
+        handleSend(data.transcript, detectedLang);
       } else {
-        // Detailed error extraction
-        let detail = "";
-        if (data.detail) {
-           detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
-        } else if (data.message) {
-           detail = data.message;
-        } else {
-           detail = JSON.stringify(data);
-        }
-        throw new Error(`Sarvam Error (${response.status}): ${detail}`);
+        throw new Error(data.message || "Failed to transcribe audio");
       }
     } catch (err) {
       console.error("Saaras API Error:", err);
-      setError(err.message);
+      setError("Could not transcribe audio. " + err.message);
       setIsTyping(false);
     }
   };
@@ -754,42 +721,17 @@ const Ai = () => {
     }
 
     try {
-      // Check for Secure Context (Required for getUserMedia in browsers)
-      if (!window.isSecureContext && !Capacitor.isNativePlatform()) {
-        setError("Microphone requires a secure connection (HTTPS or localhost). If testing on a phone, use the APK or an HTTPS tunnel.");
-        return;
-      }
-
       // For APK: Explicitly request native microphone permissions
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const perm = await CapacitorSpeech.checkPermissions();
-          if (perm.speechRecognition !== "granted") {
-            const req = await CapacitorSpeech.requestPermissions();
-            if (req.speechRecognition !== "granted") {
-              setError("Microphone permission denied.");
-              return;
-            }
-          }
-        } catch (permErr) {
-          console.warn("Permission check failed, proceeding with getUserMedia:", permErr);
+      if (window.Capacitor) {
+        const { speechRecognition } = await CapacitorSpeech.requestPermissions();
+        if (speechRecognition !== "granted") {
+          setError("Microphone permission denied.");
+          return;
         }
       }
 
-      // Check if MediaRecorder is supported
-      if (!window.MediaRecorder) {
-        setError("Microphone not supported on this device/browser.");
-        return;
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // Determine best supported mime type
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-        ? 'audio/webm;codecs=opus' 
-        : 'audio/webm';
-        
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -800,17 +742,7 @@ const Ai = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        if (audioChunksRef.current.length === 0) return;
-        
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        
-        // Prevent sending tiny/empty files
-        if (audioBlob.size < 500) {
-           console.warn("Recording too short, ignoring.");
-           return;
-        }
-
-        // Use correct extension for the blob
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
         await handleTranscribe(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -934,17 +866,17 @@ const Ai = () => {
       <div className="chat-input-wrapper">
         <div className="chat-input-container">
           <button
-            className={`chat-action-btn chat-mic-btn ${isListening ? "listening pulsing" : ""}`}
+            className={`chat-action-btn chat-mic-btn ${isListening ? "active" : ""}`}
             onClick={toggleMic}
-            title={isListening ? "Stop and Transcribe" : "Start Voice Input"}
+            title={isListening ? "Stop listening" : "Voice input"}
           >
-            {isListening ? <Square size={22} fill="var(--primary)" /> : <Mic size={22} />}
+            {isListening ? <Mic size={22} /> : <MicOff size={22} />}
           </button>
 
           <input
             className="chat-input"
             type="text"
-            placeholder={isListening ? "Listening... Click mic to stop" : isTyping ? "Transcribing..." : "Describe symptoms..."}
+            placeholder={isListening ? "Listening..." : "Describe symptoms (e.g. 'sharp chest pain')..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !isTyping && handleSend()}

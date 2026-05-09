@@ -4,10 +4,8 @@ import { Shield } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const Auth = () => {
-  const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [aadhaar, setAadhaar] = useState("");
   const [stayLoggedIn, setStayLoggedIn] = useState(false);
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
@@ -21,10 +19,10 @@ const Auth = () => {
 
   const handleLogin = (e) => {
     e.preventDefault();
-
+    
     // Perform login via context
-    login(name, mobile, password, aadhaar, stayLoggedIn);
-
+    login(email, stayLoggedIn);
+    
     // Redirect to dashboard
     navigate("/dashboard");
   };
@@ -35,39 +33,27 @@ const Auth = () => {
         <div className="auth-gradient-1"></div>
         <div className="auth-gradient-2"></div>
       </div>
-
+      
       <div className="auth-glass-card">
         <div className="auth-header">
           <Shield size={40} className="auth-icon" />
           <h2>Welcome Back</h2>
           <p>Sign in to access your emergency dashboard</p>
         </div>
-
+        
         <form onSubmit={handleLogin} className="auth-form">
           <div className="input-group">
-            <label htmlFor="name">Full Name</label>
+            <label htmlFor="email">Email Address</label>
             <input
-              id="name"
-              type="text"
-              placeholder="Responder Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              id="email"
+              type="email"
+              placeholder="responder@sahayaka.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
-
-          <div className="input-group">
-            <label htmlFor="mobile">Mobile Number</label>
-            <input
-              id="mobile"
-              type="tel"
-              placeholder="Enter your mobile number"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-              required
-            />
-          </div>
-
+          
           <div className="input-group">
             <label htmlFor="password">Password</label>
             <input
@@ -79,20 +65,7 @@ const Auth = () => {
               required
             />
           </div>
-
-          <div className="input-group">
-            <label htmlFor="aadhaar">Aadhaar Number</label>
-            <input
-              id="aadhaar"
-              type="text"
-              placeholder="1234 5678 9012"
-              value={aadhaar}
-              onChange={(e) => setAadhaar(e.target.value)}
-              maxLength={12}
-              required
-            />
-          </div>
-
+          
           <div className="checkbox-group">
             <input
               id="stay-logged-in"
@@ -100,14 +73,19 @@ const Auth = () => {
               checked={stayLoggedIn}
               onChange={(e) => setStayLoggedIn(e.target.checked)}
             />
-            <label htmlFor="stay-logged-in">Remember Me</label>
+            <label htmlFor="stay-logged-in">Stay logged in for 30 days</label>
           </div>
-
+          
           <button type="submit" className="login-btn">
             Login as Responder
           </button>
         </form>
-
+        
+        <div className="auth-footer">
+          <p>
+            Don't have an account? <span className="signup-link">Sign Up</span>
+          </p>
+        </div>
       </div>
     </div>
   );
