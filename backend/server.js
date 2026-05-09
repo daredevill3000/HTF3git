@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const morgan = require("morgan");
 const path = require('path');
 const twilio = require('twilio');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // 1. Load Environment Variables
 dotenv.config();
@@ -155,6 +156,48 @@ app.post("/api/sos/test", async (req, res) => {
     return res.status(200).json({ success: true, message: `Test SMS sent to ${mobile}`, result });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /api/triage (Proxied Gemini) ───────────────────────────────────────
+app.post("/api/triage", async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: "Backend GEMINI_API_KEY is not configured" });
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      systemInstruction: `You are Sahayaka AI, an emergency medical triage assistant for rural India.
+
+When a user describes symptoms or an emergency, respond with a JSON object in this EXACT format (no markdown fences, no extra text, just raw JSON):
+{"severity":"CRITICAL","advice":"your advice here","callHospital":true,"summary":"one line summary","languageCode":"en-IN"}
+
+"languageCode" MUST be the BCP-47 language code of your response (e.g. "en-IN", "hi-IN", "ta-IN").
+Respond in the exact same language that the user used in their input!
+
+Severity levels:
+- CRITICAL: Life-threatening (cardiac arrest, severe bleeding, unconscious, stroke, severe burns, drowning, snake bite with symptoms)
+- URGENT: Needs hospital within 1-2 hours (fractures, high fever >104F, severe pain, difficulty breathing)
+- MODERATE: Needs medical attention today (moderate fever, wounds, vomiting, mild breathing issues)
+- LOW: Can be managed at home (minor cuts, mild fever, headache, cold)
+
+Set callHospital=true only for CRITICAL or URGENT.
+Keep advice concise, calm, step-by-step. End with: "Call 112 for real emergencies."`
+    });
+    
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    
+    res.json({ text: responseText });
+  } catch (err) {
+    console.error("Gemini Backend Error:", err.message);
+    res.status(500).json({ error: "Gemini failed to process request", detail: err.message });
   }
 });
 
