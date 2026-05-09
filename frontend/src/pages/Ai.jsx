@@ -7,6 +7,7 @@ import { Geolocation } from "@capacitor/geolocation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import ReactMarkdown from "react-markdown";
 import { SpeechRecognition as CapacitorSpeech } from "@capacitor-community/speech-recognition";
+import { Capacitor } from "@capacitor/core";
 // ── Hospital database (nearest first) ────────────────────────────────────
 const HOSPITALS = [
   { name: "Gokak Government Hospital", phone: "tel:+918352220300", location: "Gokak, Belagavi", lat: 16.1667, lng: 74.8333 },
@@ -722,7 +723,7 @@ const Ai = () => {
 
     try {
       // For APK: Explicitly request native microphone permissions
-      if (window.Capacitor) {
+      if (Capacitor.isNativePlatform()) {
         const { speechRecognition } = await CapacitorSpeech.requestPermissions();
         if (speechRecognition !== "granted") {
           setError("Microphone permission denied.");
