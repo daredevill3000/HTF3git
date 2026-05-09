@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Send, Mic, User, Bot, Sparkles, AlertCircle, Loader2,
-  Volume2, VolumeX, MicOff, Phone, MapPin, Map,
+  Volume2, VolumeX, MicOff, Phone, MapPin, Map, Square
 } from "lucide-react";
 import { Geolocation } from "@capacitor/geolocation";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -913,17 +913,17 @@ const Ai = () => {
       <div className="chat-input-wrapper">
         <div className="chat-input-container">
           <button
-            className={`chat-action-btn chat-mic-btn ${isListening ? "active" : ""}`}
+            className={`chat-action-btn chat-mic-btn ${isListening ? "listening pulsing" : ""}`}
             onClick={toggleMic}
-            title={isListening ? "Stop listening" : "Voice input"}
+            title={isListening ? "Stop and Transcribe" : "Start Voice Input"}
           >
-            {isListening ? <Mic size={22} /> : <MicOff size={22} />}
+            {isListening ? <Square size={22} fill="var(--primary)" /> : <Mic size={22} />}
           </button>
 
           <input
             className="chat-input"
             type="text"
-            placeholder={isListening ? "Listening..." : "Describe symptoms (e.g. 'sharp chest pain')..."}
+            placeholder={isListening ? "Listening... Click mic to stop" : isTyping ? "Transcribing..." : "Describe symptoms..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !isTyping && handleSend()}
