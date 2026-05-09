@@ -25,8 +25,8 @@ const Navbar = () => {
         </Link>
         <Link to="/triage" className="nav-link triage-link">
           <Activity className="mobile-icon" size={20} />
-          <span className="mobile-label">Triage AI</span>
-          <button className="triage-btn">Triage AI</button>
+          <span className="mobile-label">Sahayaka AI</span>
+          <button className="triage-btn">Sahayaka AI</button>
         </Link>
         {user && (
           <button
