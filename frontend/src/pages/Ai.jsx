@@ -735,6 +735,12 @@ const Ai = () => {
     }
 
     try {
+      // Check for Secure Context (Required for getUserMedia in browsers)
+      if (!window.isSecureContext && !Capacitor.isNativePlatform()) {
+        setError("Microphone requires a secure connection (HTTPS or localhost). If testing on a phone, use the APK or an HTTPS tunnel.");
+        return;
+      }
+
       // For APK: Explicitly request native microphone permissions
       if (Capacitor.isNativePlatform()) {
         try {
